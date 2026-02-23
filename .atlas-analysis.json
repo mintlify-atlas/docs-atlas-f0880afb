@@ -1,0 +1,78 @@
+{
+  "projectType": "cli-tool",
+  "projectName": "Mailman",
+  "projectDescription": "An open source CLI alternative to Postman for managing and executing HTTP requests from the terminal",
+  "theme": "aspen",
+  "primaryColor": "#2563eb",
+  "lightColor": "#60a5fa",
+  "darkColor": "#1e40af",
+  "navigation": {
+    "groups": [
+      {
+        "group": "Get Started",
+        "pages": [
+          "introduction",
+          "installation",
+          "quickstart"
+        ]
+      },
+      {
+        "group": "Core Concepts",
+        "pages": [
+          "concepts/requests",
+          "concepts/environments",
+          "concepts/variables",
+          "concepts/cookies"
+        ]
+      },
+      {
+        "group": "Commands",
+        "pages": [
+          "commands/init",
+          "commands/list",
+          "commands/new",
+          "commands/view",
+          "commands/run",
+          "commands/set-path"
+        ]
+      },
+      {
+        "group": "Configuration",
+        "pages": [
+          "config/config-file",
+          "config/request-files",
+          "config/environment-files"
+        ]
+      },
+      {
+        "group": "Guides",
+        "pages": [
+          "guides/getting-started",
+          "guides/authentication",
+          "guides/working-with-environments",
+          "guides/managing-cookies",
+          "guides/troubleshooting"
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "JSON-based request files with variable interpolation",
+    "Multiple environment support (dev, prod, etc.)",
+    "Environment file support (.env)",
+    "Runtime variable overrides via CLI flags",
+    "Interactive request selection and creation",
+    "Request previewing before execution",
+    "Cookie management with named groups",
+    "Bearer token authentication support"
+  ],
+  "publicApiSurface": [
+    "mailman init",
+    "mailman list",
+    "mailman new",
+    "mailman view <filepath>",
+    "mailman run [filepath]",
+    "mailman set-path [path]",
+    "mailman show-path"
+  ]
+}
