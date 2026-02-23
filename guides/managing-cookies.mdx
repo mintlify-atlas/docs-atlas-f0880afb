@@ -1,0 +1,850 @@
+---
+title: "Managing cookies"
+description: "Learn how to use cookie groups in Mailman for session-based authentication and managing multiple cookie sets"
+---
+
+This guide covers how to use Mailman's cookie management feature to handle session-based authentication, maintain multiple cookie sets, and work with cookies across different environments.
+
+## What you'll learn
+
+- Understanding cookie groups
+- Configuring cookies per environment
+- Using cookies in requests
+- Managing multiple cookie groups
+- Cookie troubleshooting
+
+## Understanding cookie groups
+
+Cookie groups in Mailman allow you to maintain sets of cookies for different sessions or users. This is essential when working with APIs that use session-based authentication instead of token-based auth.
+
+### When to use cookies
+
+- **Session-based authentication**: APIs that use session cookies instead of Bearer tokens
+- **Testing multiple users**: Switch between different user sessions
+- **Cross-site requests**: Maintain authentication cookies for different domains
+- **Stateful APIs**: APIs that require cookies to maintain state
+
+### How cookie groups work
+
+1. Define cookie groups in `config.json` for each environment
+2. Enable cookies in your request file with `"cookies": true`
+3. When running the request, Mailman prompts you to select a cookie group (if multiple exist)
+4. Selected cookies are automatically added as a `Cookie` header
+
+## Setting up cookie groups
+
+<Steps>
+  <Step title="Add cookie groups to config.json">
+    Define cookie groups in your environment configuration:
+
+    ```json
+    {
+      "defaultEnvironment": "dev",
+      "environments": {
+        "dev": {
+          "variables": {
+            "baseUrl": "http://localhost:3000"
+          },
+          "cookies": [
+            {
+              "name": "user-session",
+              "cookies": {
+                "session_id": "abc123def456",
+                "csrf_token": "xyz789uvw012"
+              }
+            },
+            {
+              "name": "admin-session",
+              "cookies": {
+                "session_id": "admin_abc123",
+                "csrf_token": "admin_xyz789",
+                "admin_token": "secure_admin_token"
+              }
+            }
+          ]
+        }
+      }
+    }
+    ```
+
+    <Info>
+      Each cookie group has a `name` for identification and a `cookies` object with key-value pairs.
+    </Info>
+  </Step>
+
+  <Step title="Enable cookies in a request">
+    In your request file, set `"cookies": true`:
+
+    ```json
+    {
+      "name": "Get User Profile",
+      "method": "GET",
+      "url": "{{baseUrl}}/api/profile",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "cookies": true
+    }
+    ```
+  </Step>
+
+  <Step title="Run the request">
+    When you run the request, Mailman prompts you to select a cookie group:
+
+    ```bash
+    mailman run requests/get-profile.json
+    ```
+
+    Output:
+    ```
+    ? select cookie
+    ❯ user-session
+      admin-session
+    ```
+
+    Select one and the cookies are automatically included in the request.
+  </Step>
+</Steps>
+
+## Cookie group selection behavior
+
+### Single cookie group
+
+If only one cookie group is defined, it's used automatically without prompting:
+
+```json
+{
+  "environments": {
+    "dev": {
+      "cookies": [
+        {
+          "name": "default-session",
+          "cookies": {
+            "session_id": "abc123"
+          }
+        }
+      ]
+    }
+  }
+}
+```
+
+Running a request with `"cookies": true` automatically uses `default-session` without prompting.
+
+### Multiple cookie groups
+
+With multiple cookie groups, you're prompted to choose:
+
+```json
+{
+  "cookies": [
+    {
+      "name": "user-1",
+      "cookies": { "session_id": "user1_session" }
+    },
+    {
+      "name": "user-2",
+      "cookies": { "session_id": "user2_session" }
+    }
+  ]
+}
+```
+
+### No cookie groups
+
+If `"cookies": true` but no cookie groups are defined for the environment, the request proceeds without cookies.
+
+## Cookie header format
+
+Mailman converts cookie groups to standard HTTP Cookie headers:
+
+```json
+{
+  "name": "user-session",
+  "cookies": {
+    "session_id": "abc123",
+    "csrf_token": "xyz789",
+    "preference": "dark_mode"
+  }
+}
+```
+
+Becomes:
+
+```
+Cookie: session_id=abc123; csrf_token=xyz789; preference=dark_mode
+```
+
+<Info>
+  Cookies are joined with `; ` (semicolon and space) following HTTP cookie header standards.
+</Info>
+
+## Environment-specific cookies
+
+Define different cookie groups for each environment:
+
+```json
+{
+  "defaultEnvironment": "dev",
+  "environments": {
+    "dev": {
+      "variables": {
+        "baseUrl": "http://localhost:3000"
+      },
+      "cookies": [
+        {
+          "name": "dev-user",
+          "cookies": {
+            "session_id": "dev_session_123",
+            "debug": "true"
+          }
+        }
+      ]
+    },
+    "staging": {
+      "variables": {
+        "baseUrl": "https://staging.api.example.com"
+      },
+      "cookies": [
+        {
+          "name": "staging-user",
+          "cookies": {
+            "session_id": "staging_session_456"
+          }
+        }
+      ]
+    },
+    "prod": {
+      "variables": {
+        "baseUrl": "https://api.example.com"
+      },
+      "cookies": [
+        {
+          "name": "prod-user",
+          "cookies": {
+            "session_id": "prod_session_789"
+          }
+        }
+      ]
+    }
+  }
+}
+```
+
+Switch between environments:
+
+```bash
+# Uses dev cookies
+mailman run requests/get-profile.json
+
+# Uses staging cookies
+mailman run requests/get-profile.json -e staging
+
+# Uses prod cookies
+mailman run requests/get-profile.json -e prod
+```
+
+## Common use cases
+
+### Use case 1: Testing as different users
+
+```json
+{
+  "environments": {
+    "dev": {
+      "variables": {
+        "baseUrl": "http://localhost:3000"
+      },
+      "cookies": [
+        {
+          "name": "regular-user",
+          "cookies": {
+            "session_id": "user_regular_session",
+            "user_role": "user"
+          }
+        },
+        {
+          "name": "admin-user",
+          "cookies": {
+            "session_id": "user_admin_session",
+            "user_role": "admin"
+          }
+        },
+        {
+          "name": "moderator-user",
+          "cookies": {
+            "session_id": "user_mod_session",
+            "user_role": "moderator"
+          }
+        }
+      ]
+    }
+  }
+}
+```
+
+Test permissions:
+
+```bash
+# Test as regular user
+mailman run requests/delete-post.json
+# Select: regular-user
+# Expected: 403 Forbidden
+
+# Test as admin
+mailman run requests/delete-post.json
+# Select: admin-user
+# Expected: 200 OK
+```
+
+### Use case 2: CSRF token handling
+
+```json
+{
+  "name": "csrf-protected-session",
+  "cookies": {
+    "session_id": "secure_session_abc123",
+    "csrf_token": "csrf_xyz789",
+    "_xsrf": "xsrf_token_012345"
+  }
+}
+```
+
+Used with a POST request:
+
+```json
+{
+  "name": "Update Settings",
+  "method": "POST",
+  "url": "{{baseUrl}}/settings",
+  "headers": {
+    "Content-Type": "application/json",
+    "X-CSRF-Token": "{{csrfToken}}"
+  },
+  "cookies": true,
+  "body": {
+    "setting": "value"
+  }
+}
+```
+
+<Tip>
+  You can still use headers alongside cookies. Cookies are added to the request in addition to any defined headers.
+</Tip>
+
+### Use case 3: Multi-tenant testing
+
+```json
+{
+  "cookies": [
+    {
+      "name": "tenant-acme",
+      "cookies": {
+        "session_id": "session_acme_123",
+        "tenant_id": "acme_corp"
+      }
+    },
+    {
+      "name": "tenant-globex",
+      "cookies": {
+        "session_id": "session_globex_456",
+        "tenant_id": "globex_inc"
+      }
+    }
+  ]
+}
+```
+
+Test the same endpoint with different tenants:
+
+```bash
+# Test with ACME tenant
+mailman run requests/get-dashboard.json
+# Select: tenant-acme
+
+# Test with Globex tenant
+mailman run requests/get-dashboard.json
+# Select: tenant-globex
+```
+
+### Use case 4: Session-based vs token-based auth
+
+You can combine cookies with token authentication:
+
+```json
+{
+  "name": "Get Protected Resource",
+  "method": "GET",
+  "url": "{{baseUrl}}/api/resource",
+  "headers": {
+    "Authorization": "Bearer {{API_TOKEN}}",
+    "Content-Type": "application/json"
+  },
+  "cookies": true
+}
+```
+
+The request includes both:
+- `Authorization: Bearer ...` header
+- `Cookie: session_id=...; csrf_token=...` header
+
+## Obtaining cookie values
+
+### Method 1: Browser DevTools
+
+<Steps>
+  <Step title="Login to your application">
+    Open your web application in a browser and log in.
+  </Step>
+
+  <Step title="Open DevTools">
+    Press F12 or right-click and select "Inspect".
+  </Step>
+
+  <Step title="Navigate to Application/Storage tab">
+    - Chrome/Edge: **Application** tab → **Cookies**
+    - Firefox: **Storage** tab → **Cookies**
+  </Step>
+
+  <Step title="Copy cookie values">
+    Find the cookies you need and copy their values into your `config.json`.
+  </Step>
+</Steps>
+
+### Method 2: Login request in Mailman
+
+Create a login request and extract cookies from the response:
+
+```json
+// requests/auth/login.json
+{
+  "name": "Login",
+  "method": "POST",
+  "url": "{{baseUrl}}/auth/login",
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "body": {
+    "username": "{{username}}",
+    "password": "{{password}}"
+  }
+}
+```
+
+Run the login:
+
+```bash
+mailman run requests/auth/login.json -v username=myuser -v password=mypass
+```
+
+Look for `Set-Cookie` in the response headers:
+
+```
+Response Headers:
+  set-cookie: session_id=abc123; Path=/; HttpOnly
+  set-cookie: csrf_token=xyz789; Path=/
+```
+
+Copy these values to your cookie group:
+
+```json
+{
+  "name": "logged-in-user",
+  "cookies": {
+    "session_id": "abc123",
+    "csrf_token": "xyz789"
+  }
+}
+```
+
+### Method 3: Using curl
+
+```bash
+curl -i -X POST https://api.example.com/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"user","password":"pass"}'
+```
+
+Extract cookies from the `Set-Cookie` headers in the response.
+
+## Previewing cookies
+
+Use `mailman view` to see how cookies are resolved:
+
+```bash
+mailman view requests/get-profile.json
+```
+
+If cookies are enabled, you'll be prompted to select a cookie group, then see:
+
+```
+Request: Get User Profile
+Environment: dev
+
+Method: GET
+URL: http://localhost:3000/api/profile
+
+Headers:
+  Content-Type: application/json
+  Cookie: session_id=abc123; csrf_token=xyz789
+```
+
+<Warning>
+  Cookie values are displayed in plain text. Be careful when sharing `mailman view` output.
+</Warning>
+
+## Cookies vs headers
+
+### When to use cookies
+
+- Your API uses session-based authentication
+- The server sets cookies via `Set-Cookie` headers
+- You need to maintain state across requests
+- Testing with browser-based sessions
+
+### When to use Authorization headers
+
+- Your API uses token-based authentication (Bearer tokens, API keys)
+- You have a stateless API
+- The token is obtained separately and doesn't change frequently
+
+Example with headers:
+
+```json
+{
+  "name": "Get Data",
+  "method": "GET",
+  "url": "{{baseUrl}}/api/data",
+  "headers": {
+    "Authorization": "Bearer {{API_TOKEN}}"
+  },
+  "cookies": false
+}
+```
+
+Example with cookies:
+
+```json
+{
+  "name": "Get Data",
+  "method": "GET",
+  "url": "{{baseUrl}}/api/data",
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "cookies": true
+}
+```
+
+## Best practices
+
+### 1. Use descriptive cookie group names
+
+```json
+// ✅ Good - Clear and descriptive
+{
+  "cookies": [
+    { "name": "user-john-doe", "cookies": {...} },
+    { "name": "admin-jane-smith", "cookies": {...} },
+    { "name": "guest-session", "cookies": {...} }
+  ]
+}
+
+// ❌ Bad - Unclear names
+{
+  "cookies": [
+    { "name": "session1", "cookies": {...} },
+    { "name": "session2", "cookies": {...} },
+    { "name": "session3", "cookies": {...} }
+  ]
+}
+```
+
+### 2. Keep cookies environment-specific
+
+Don't share production cookies in dev:
+
+```json
+{
+  "dev": {
+    "cookies": [
+      { "name": "dev-session", "cookies": {...} }
+    ]
+  },
+  "prod": {
+    "cookies": [
+      { "name": "prod-session", "cookies": {...} }
+    ]
+  }
+}
+```
+
+### 3. Refresh cookies regularly
+
+Session cookies expire. Update them periodically:
+
+```bash
+# 1. Run login to get fresh cookies
+mailman run requests/auth/login.json
+
+# 2. Copy new cookie values from response headers
+# 3. Update config.json with new values
+```
+
+### 4. Use cookies only when needed
+
+Set `"cookies": false` (or omit it) for requests that don't need authentication:
+
+```json
+{
+  "name": "Get Public Data",
+  "method": "GET",
+  "url": "{{baseUrl}}/public/data",
+  "cookies": false
+}
+```
+
+### 5. Don't commit sensitive cookies
+
+If cookies contain sensitive data, move them to `.env` files:
+
+```bash
+# .env.dev
+SESSION_ID=dev_session_abc123
+CSRF_TOKEN=dev_csrf_xyz789
+```
+
+Then reference them in `config.json`:
+
+```json
+{
+  "cookies": [
+    {
+      "name": "dev-session",
+      "cookies": {
+        "session_id": "{{SESSION_ID}}",
+        "csrf_token": "{{CSRF_TOKEN}}"
+      }
+    }
+  ]
+}
+```
+
+<Note>
+  Variables in cookie values are resolved the same way as in request URLs and headers.
+</Note>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="401 Unauthorized with cookies enabled">
+    **Symptoms**: Request fails with 401 even though cookies are enabled.
+
+    **Solutions**:
+    1. Verify cookies are actually being sent:
+       ```bash
+       mailman view requests/your-request.json
+       # Check the Cookie header in the output
+       ```
+    
+    2. Check if cookies have expired - get fresh cookies from a login request
+    
+    3. Verify the cookie names match what the API expects
+    
+    4. Some APIs require both cookies AND Authorization headers - add both:
+       ```json
+       {
+         "headers": {
+           "Authorization": "Bearer {{API_TOKEN}}"
+         },
+         "cookies": true
+       }
+       ```
+  </Accordion>
+
+  <Accordion title="Cookie prompt not appearing">
+    **Symptoms**: No prompt to select cookie group.
+
+    **Solutions**:
+    1. Verify `"cookies": true` is set in the request file
+    
+    2. Check that cookie groups are defined in `config.json` for the current environment:
+       ```json
+       {
+         "environments": {
+           "dev": {
+             "cookies": [
+               { "name": "...", "cookies": {...} }
+             ]
+           }
+         }
+       }
+       ```
+    
+    3. If only one cookie group exists, it's used automatically (no prompt)
+  </Accordion>
+
+  <Accordion title="Wrong cookies being used">
+    **Symptoms**: Request uses cookies from the wrong environment.
+
+    **Solutions**:
+    1. Check which environment is active:
+       ```bash
+       mailman run requests/your-request.json
+       # Output shows: Environment: dev
+       ```
+    
+    2. Specify the correct environment:
+       ```bash
+       mailman run requests/your-request.json -e prod
+       ```
+    
+    3. Verify cookies are defined under the correct environment in `config.json`
+  </Accordion>
+
+  <Accordion title="Cookies not formatted correctly">
+    **Symptoms**: Server rejects cookies or doesn't recognize them.
+
+    **Solutions**:
+    1. Check the Cookie header format in `mailman view` output
+    
+    2. Verify cookie names and values are correct (no extra spaces or characters)
+    
+    3. Some servers are strict about cookie formatting:
+       ```
+       ✅ Correct: session_id=abc123; csrf_token=xyz789
+       ❌ Wrong: session_id = abc123 ; csrf_token = xyz789
+       ```
+    
+    4. Check if the API expects cookies in a specific order (rare, but possible)
+  </Accordion>
+
+  <Accordion title="Can't extract cookies from login response">
+    **Symptoms**: Login succeeds but can't find cookies in response.
+
+    **Solutions**:
+    1. Look for `set-cookie` (lowercase) in response headers:
+       ```bash
+       mailman run requests/auth/login.json
+       # Look in "Response Headers:" section
+       ```
+    
+    2. Some APIs return cookies in the response body instead of headers:
+       ```json
+       {
+         "token": "...",
+         "session": {
+           "session_id": "abc123",
+           "csrf_token": "xyz789"
+         }
+       }
+       ```
+    
+    3. Check API documentation for authentication method - it might use tokens instead of cookies
+  </Accordion>
+</AccordionGroup>
+
+## Complete example
+
+Here's a complete example of using cookies for session-based authentication:
+
+### config.json
+
+```json
+{
+  "defaultEnvironment": "dev",
+  "environments": {
+    "dev": {
+      "variables": {
+        "baseUrl": "http://localhost:3000"
+      },
+      "cookies": [
+        {
+          "name": "john-user-session",
+          "cookies": {
+            "session_id": "user_john_abc123",
+            "csrf_token": "csrf_john_xyz789",
+            "user_preferences": "theme=dark"
+          }
+        },
+        {
+          "name": "jane-admin-session",
+          "cookies": {
+            "session_id": "admin_jane_def456",
+            "csrf_token": "csrf_jane_uvw012",
+            "admin_level": "super"
+          }
+        }
+      ]
+    }
+  }
+}
+```
+
+### requests/profile/get-profile.json
+
+```json
+{
+  "name": "Get User Profile",
+  "method": "GET",
+  "url": "{{baseUrl}}/api/profile",
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "cookies": true
+}
+```
+
+### requests/profile/update-profile.json
+
+```json
+{
+  "name": "Update User Profile",
+  "method": "PUT",
+  "url": "{{baseUrl}}/api/profile",
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "body": {
+    "name": "{{userName}}",
+    "email": "{{userEmail}}"
+  },
+  "cookies": true
+}
+```
+
+### Usage
+
+```bash
+# Get profile as John (user)
+mailman run requests/profile/get-profile.json
+# Select: john-user-session
+
+# Get profile as Jane (admin)
+mailman run requests/profile/get-profile.json
+# Select: jane-admin-session
+
+# Update profile as John
+mailman run requests/profile/update-profile.json -v userName="John Updated" -v userEmail="john@example.com"
+# Select: john-user-session
+```
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Authentication" icon="key" href="/guides/authentication">
+    Learn about token-based authentication methods
+  </Card>
+  
+  <Card title="Working with environments" icon="layer-group" href="/guides/working-with-environments">
+    Master environment and variable management
+  </Card>
+  
+  <Card title="Troubleshooting" icon="wrench" href="/guides/troubleshooting">
+    Solutions to common issues
+  </Card>
+  
+  <Card title="Getting started" icon="rocket" href="/guides/getting-started">
+    Back to the getting started guide
+  </Card>
+</CardGroup>

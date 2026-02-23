@@ -1,0 +1,328 @@
+---
+title: 'Environment files'
+description: 'Learn how to use .env files for managing sensitive variables and environment-specific configuration'
+---
+
+Mailman supports `.env` files for managing environment variables, particularly useful for storing sensitive information like API keys and authentication tokens that shouldn't be committed to version control.
+
+## File location
+
+Environment files should be placed in the same directory as your `config.json` file. Mailman automatically detects the config directory and loads the appropriate `.env` file.
+
+```
+project/
+├── config.json
+├── .env              # Default environment variables
+├── .env.dev          # Dev environment variables
+├── .env.staging      # Staging environment variables
+├── .env.prod         # Production environment variables
+└── requests/
+    └── ...
+```
+
+## File naming
+
+Mailman uses the following naming convention for environment files:
+
+- **`.env`** - Used when running with the default environment
+- **`.env.{envName}`** - Used when running with a specific environment via `--env`
+
+### Selection logic
+
+When you run a request:
+
+1. If you specify `--env prod`, Mailman looks for `.env.prod`
+2. If the default environment is `dev` and you don't specify `--env`, Mailman looks for `.env`
+3. If you specify `--env staging` (and it's not the default), Mailman looks for `.env.staging`
+
+<Info>
+  The base `.env` file is only loaded when using the default environment. Environment-specific files (`.env.{envName}`) are loaded when that environment is explicitly selected or is the default.
+</Info>
+
+## Format
+
+Environment files use the standard `.env` format:
+
+```bash
+# API Configuration
+API_KEY=sk_live_abc123def456
+API_SECRET=secret_xyz789
+
+# Service URLs
+BASE_URL=https://api.example.com
+WEBHOOK_URL=https://webhook.example.com/callback
+
+# Authentication
+BEARER_TOKEN=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+USER_ID=user_12345
+
+# Feature Flags
+ENABLE_DEBUG=true
+TIMEOUT=5000
+```
+
+### Syntax rules
+
+- Each line contains a key-value pair separated by `=`
+- No spaces around the `=` sign
+- Comments start with `#`
+- Values don't need quotes (but can use them)
+- Empty lines are ignored
+
+## Variable priority
+
+When resolving variables in your requests, Mailman follows this priority order (highest to lowest):
+
+1. **CLI variables** - Passed with `--var key=value`
+2. **Environment file variables** - From `.env` or `.env.{envName}`
+3. **Request-level `defaultValues`** - Defined in the request file
+4. **Config file `variables`** - Defined in `config.json`
+5. **Interactive prompt** - User is asked to provide the value
+
+<Note>
+  Environment file variables override config file variables but are themselves overridden by CLI variables. This allows you to have a secure default while still being able to test with different values.
+</Note>
+
+## Usage examples
+
+### Basic usage
+
+Given this `.env` file:
+
+```bash
+API_KEY=sk_test_abc123
+BASE_URL=http://localhost:3000
+```
+
+And this request file:
+
+```json
+{
+  "name": "Get Users",
+  "method": "GET",
+  "url": "{{BASE_URL}}/users",
+  "headers": {
+    "Authorization": "Bearer {{API_KEY}}"
+  }
+}
+```
+
+Running `mailman run requests/get-users.json` will resolve:
+- `{{BASE_URL}}` → `http://localhost:3000`
+- `{{API_KEY}}` → `sk_test_abc123`
+
+### Environment-specific files
+
+Create different `.env` files for each environment:
+
+**`.env` (default/dev)**
+```bash
+API_KEY=sk_test_dev123
+BASE_URL=http://localhost:3000
+DEBUG=true
+```
+
+**`.env.staging`**
+```bash
+API_KEY=sk_test_staging456
+BASE_URL=https://staging-api.example.com
+DEBUG=true
+```
+
+**`.env.prod`**
+```bash
+API_KEY=sk_live_prod789
+BASE_URL=https://api.example.com
+DEBUG=false
+```
+
+Then run with different environments:
+
+```bash
+# Uses .env (default)
+mailman run requests/get-users.json
+
+# Uses .env.staging
+mailman run requests/get-users.json --env staging
+
+# Uses .env.prod
+mailman run requests/get-users.json --env prod
+```
+
+### Overriding with CLI variables
+
+You can override environment file variables from the command line:
+
+```bash
+mailman run requests/get-users.json --var API_KEY=custom_key_xyz
+```
+
+This will use `custom_key_xyz` instead of the value from `.env`.
+
+### Combining with config variables
+
+Environment files work alongside config file variables. Here's how they interact:
+
+**`config.json`**
+```json
+{
+  "defaultEnvironment": "dev",
+  "environments": {
+    "dev": {
+      "variables": {
+        "baseUrl": "http://localhost:3000",
+        "apiVersion": "v1"
+      }
+    }
+  }
+}
+```
+
+**`.env`**
+```bash
+API_KEY=sk_test_abc123
+baseUrl=http://localhost:4000
+```
+
+**Request file**
+```json
+{
+  "name": "Get Users",
+  "method": "GET",
+  "url": "{{baseUrl}}/api/{{apiVersion}}/users",
+  "headers": {
+    "Authorization": "Bearer {{API_KEY}}"
+  }
+}
+```
+
+When running this request:
+- `{{baseUrl}}` → `http://localhost:4000` (from `.env`, overrides config)
+- `{{apiVersion}}` → `v1` (from config.json)
+- `{{API_KEY}}` → `sk_test_abc123` (from `.env`)
+
+## Security best practices
+
+<Warning>
+  Always add `.env*` files to your `.gitignore` to prevent committing sensitive credentials to version control:
+  
+  ```
+  .env
+  .env.*
+  .env.local
+  ```
+</Warning>
+
+<Note>
+  Create a `.env.example` file with dummy values to document what variables are needed:
+  
+  ```bash
+  # .env.example
+  API_KEY=your_api_key_here
+  API_SECRET=your_api_secret_here
+  BASE_URL=https://api.example.com
+  ```
+  
+  Commit this example file to help other developers set up their environment.
+</Note>
+
+<Info>
+  Use different API keys for different environments. Never use production credentials in development or staging environments.
+</Info>
+
+## Common patterns
+
+### Secrets in .env, public values in config
+
+Store sensitive values in `.env`:
+
+```bash
+# .env
+API_KEY=sk_test_abc123
+DATABASE_PASSWORD=secure_password_here
+```
+
+Store public configuration in `config.json`:
+
+```json
+{
+  "defaultEnvironment": "dev",
+  "environments": {
+    "dev": {
+      "variables": {
+        "baseUrl": "http://localhost:3000",
+        "apiVersion": "v1",
+        "timeout": "5000"
+      }
+    }
+  }
+}
+```
+
+### Team sharing
+
+For team projects:
+
+1. **Don't commit**: `.env`, `.env.dev`, `.env.staging`, `.env.prod`
+2. **Do commit**: `.env.example`, `config.json`
+3. Each team member creates their own `.env` files based on `.env.example`
+
+### Multiple API keys
+
+If you need different API keys for different services:
+
+```bash
+# .env
+STRIPE_API_KEY=sk_test_stripe123
+SENDGRID_API_KEY=SG.abc123
+AWS_ACCESS_KEY=AKIAIOSFODNN7EXAMPLE
+AWS_SECRET_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+```
+
+Reference them in your requests:
+
+```json
+{
+  "name": "Create Payment",
+  "method": "POST",
+  "url": "https://api.stripe.com/v1/charges",
+  "headers": {
+    "Authorization": "Bearer {{STRIPE_API_KEY}}"
+  }
+}
+```
+
+## Troubleshooting
+
+### Variable not being loaded
+
+1. Check that the `.env` file is in the same directory as `config.json`
+2. Verify the file naming matches the environment (`--env prod` requires `.env.prod`)
+3. Ensure there are no spaces around the `=` sign
+4. Check that the variable name in the request matches the key in `.env` exactly (case-sensitive)
+
+### Wrong environment file loaded
+
+- Base `.env` is only used for the default environment
+- If you specify `--env staging`, you need `.env.staging`, not `.env`
+- If `staging` is your default environment, use `.env` (not `.env.staging`)
+
+### Variables still prompting
+
+If Mailman prompts for a variable that's defined in `.env`:
+
+1. Check the variable name matches exactly (including case)
+2. Verify the `.env` file is in the correct location
+3. Make sure the `.env` file is valid (no syntax errors)
+4. Try using `--var` to pass it directly and confirm the request works
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Configuration file" icon="gear" href="/config/config-file">
+    Learn about config.json structure
+  </Card>
+  <Card title="Request files" icon="file-code" href="/config/request-files">
+    Learn how to create HTTP request files
+  </Card>
+</CardGroup>

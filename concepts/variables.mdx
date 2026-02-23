@@ -1,0 +1,416 @@
+---
+title: Variables
+description: Learn how variable interpolation and resolution works in Mailman
+---
+
+Variables allow you to create reusable, dynamic request files that adapt to different environments and contexts. Mailman uses a double-curly-brace syntax (`{{variableName}}`) for variable interpolation.
+
+## Variable syntax
+
+Variables are defined using the `{{variableName}}` syntax and can be used anywhere in your request files:
+
+```json
+{
+  "name": "Get User",
+  "method": "GET",
+  "url": "{{baseUrl}}/users/{{userId}}",
+  "headers": {
+    "Authorization": "Bearer {{API_KEY}}"
+  }
+}
+```
+
+<Info>
+Variable pattern matching is implemented in `src/utils/variables.ts:4-6` using the regex `/\{\{(\w+)\}\}/g`
+</Info>
+
+## Where variables can be used
+
+Variables work in all string fields throughout your request file:
+
+<Tabs>
+  <Tab title="URLs">
+    ```json
+    {
+      "url": "{{protocol}}://{{host}}:{{port}}/{{path}}"
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Headers">
+    ```json
+    {
+      "headers": {
+        "Authorization": "{{authScheme}} {{token}}",
+        "X-API-Key": "{{apiKey}}",
+        "X-User-Id": "{{userId}}"
+      }
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Body">
+    ```json
+    {
+      "body": {
+        "username": "{{username}}",
+        "email": "{{email}}",
+        "metadata": {
+          "source": "{{source}}",
+          "version": "{{version}}"
+        }
+      }
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Request name">
+    ```json
+    {
+      "name": "Get {{resourceType}} by ID"
+    }
+    ```
+  </Tab>
+</Tabs>
+
+<Note>
+Variable interpolation recursively processes all string values in the request object, including nested objects and arrays. See `src/utils/variables.ts:51-73`
+</Note>
+
+## Variable resolution priority
+
+When you run a request, Mailman resolves variables in a specific order. Values from higher-priority sources override those from lower-priority sources:
+
+<Steps>
+  <Step title="Request default values (lowest priority)">
+    Variables defined in the `defaultValues` field of the request file:
+    
+    ```json
+    {
+      "url": "{{baseUrl}}/users/{{userId}}",
+      "defaultValues": {
+        "userId": "123"
+      }
+    }
+    ```
+    
+    Applied in `src/commands/run.ts:105-109`
+  </Step>
+  
+  <Step title="Environment variables from config.json">
+    Variables defined in the environment configuration:
+    
+    ```json
+    {
+      "environments": {
+        "dev": {
+          "variables": {
+            "baseUrl": "http://localhost:3000"
+          }
+        }
+      }
+    }
+    ```
+    
+    Applied in `src/commands/run.ts:94`
+  </Step>
+  
+  <Step title="Environment file variables (.env)">
+    Variables loaded from `.env` or `.env.{environment}` files:
+    
+    ```bash
+    # .env
+    API_KEY=your-api-key-here
+    baseUrl=http://localhost:8080
+    ```
+    
+    Applied in `src/commands/run.ts:110-114`
+  </Step>
+  
+  <Step title="Command-line variables (highest priority)">
+    Variables passed via the `--var` flag:
+    
+    ```bash
+    mailman run --var userId=456 --var baseUrl=http://custom.com
+    ```
+    
+    Applied in `src/commands/run.ts:115-118`
+  </Step>
+</Steps>
+
+<Warning>
+Variables with the same name will be overridden based on this priority order. Command-line variables always win.
+</Warning>
+
+## Resolution order example
+
+Consider this scenario with the same variable defined in multiple places:
+
+<Accordion title="Request file">
+  ```json
+  {
+    "url": "{{baseUrl}}/users",
+    "defaultValues": {
+      "baseUrl": "http://localhost:3000"
+    }
+  }
+  ```
+</Accordion>
+
+<Accordion title="config.json">
+  ```json
+  {
+    "environments": {
+      "dev": {
+        "variables": {
+          "baseUrl": "http://localhost:4000"
+        }
+      }
+    }
+  }
+  ```
+</Accordion>
+
+<Accordion title=".env file">
+  ```bash
+  baseUrl=http://localhost:5000
+  ```
+</Accordion>
+
+<Accordion title="Command line">
+  ```bash
+  mailman run requests/get-users.json --var baseUrl=http://localhost:6000
+  ```
+</Accordion>
+
+The final resolved URL will be `http://localhost:6000/users` because command-line variables have the highest priority.
+
+## Interactive variable prompts
+
+If a variable is referenced but not defined in any source, Mailman will prompt you to enter a value:
+
+```bash
+$ mailman run requests/get-users.json
+? Fill variable value for userId › 
+```
+
+<Info>
+Unfilled variable detection is implemented in `src/utils/variables.ts:4-21` and the prompting logic is in `src/commands/run.ts:120-127`
+</Info>
+
+<Tip>
+Define frequently used variables in your environment configuration to avoid repetitive prompts.
+</Tip>
+
+## Setting variables via command line
+
+The `--var` flag allows you to set or override variables at runtime:
+
+<Tabs>
+  <Tab title="Single variable">
+    ```bash
+    mailman run requests/get-users.json --var userId=123
+    ```
+  </Tab>
+  
+  <Tab title="Multiple variables">
+    ```bash
+    mailman run requests/get-users.json --var userId=123 --var role=admin
+    ```
+  </Tab>
+  
+  <Tab title="Values with special characters">
+    ```bash
+    mailman run --var apiKey="sk-abc=123" --var url="https://api.com?foo=bar"
+    ```
+  </Tab>
+</Tabs>
+
+<Note>
+The `--var` flag accepts values in the format `key=value`. If the value contains `=` characters, everything after the first `=` is treated as the value. See `src/commands/run.ts:115-118`
+</Note>
+
+## Variable interpolation mechanism
+
+Mailman's interpolation process works as follows:
+
+1. **Find all variables**: Scan the request object for `{{variableName}}` patterns
+2. **Collect values**: Gather values from all sources (defaultValues, environment, .env, CLI)
+3. **Apply priority**: Merge values according to the resolution priority
+4. **Replace placeholders**: Substitute `{{variableName}}` with actual values
+5. **Prompt for missing**: Ask user for any remaining unfilled variables
+
+<Info>
+The interpolation algorithm is implemented in `src/utils/variables.ts:39-73`. It recursively processes strings, arrays, and objects to replace all variable references.
+</Info>
+
+## Examples
+
+### Basic API request
+
+<Tabs>
+  <Tab title="Request file">
+    ```json
+    {
+      "name": "Get User Profile",
+      "method": "GET",
+      "url": "{{baseUrl}}/users/{{userId}}",
+      "headers": {
+        "Authorization": "Bearer {{API_KEY}}"
+      }
+    }
+    ```
+  </Tab>
+  
+  <Tab title="config.json">
+    ```json
+    {
+      "defaultEnvironment": "dev",
+      "environments": {
+        "dev": {
+          "variables": {
+            "baseUrl": "http://localhost:3000"
+          }
+        }
+      }
+    }
+    ```
+  </Tab>
+  
+  <Tab title=".env">
+    ```bash
+    API_KEY=dev_key_abc123
+    ```
+  </Tab>
+  
+  <Tab title="Command">
+    ```bash
+    mailman run requests/get-user.json --var userId=42
+    ```
+    
+    Resolves to:
+    - `baseUrl` → `http://localhost:3000` (from config.json)
+    - `API_KEY` → `dev_key_abc123` (from .env)
+    - `userId` → `42` (from CLI)
+  </Tab>
+</Tabs>
+
+### Multi-environment setup
+
+<Tabs>
+  <Tab title="Request file">
+    ```json
+    {
+      "name": "Create Order",
+      "method": "POST",
+      "url": "{{baseUrl}}/orders",
+      "headers": {
+        "Authorization": "Bearer {{API_KEY}}",
+        "X-Request-ID": "{{requestId}}"
+      },
+      "body": {
+        "productId": "{{productId}}",
+        "quantity": "{{quantity}}"
+      },
+      "defaultValues": {
+        "quantity": "1"
+      }
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Development">
+    ```bash
+    # Uses dev environment
+    mailman run requests/create-order.json --var productId=prod-123
+    ```
+    
+    Variables:
+    - `baseUrl` → from dev environment config
+    - `API_KEY` → from .env file
+    - `productId` → from CLI
+    - `quantity` → `1` (from defaultValues)
+    - `requestId` → prompted interactively
+  </Tab>
+  
+  <Tab title="Production">
+    ```bash
+    # Uses prod environment
+    mailman run requests/create-order.json --env prod --var productId=prod-123
+    ```
+    
+    Variables:
+    - `baseUrl` → from prod environment config
+    - `API_KEY` → from .env.prod file
+    - `productId` → from CLI
+    - `quantity` → `1` (from defaultValues)
+    - `requestId` → prompted interactively
+  </Tab>
+</Tabs>
+
+## Best practices
+
+<Accordion title="Use descriptive variable names">
+  Choose clear, self-documenting variable names:
+  
+  ```json
+  // Good
+  {"url": "{{baseUrl}}/users/{{userId}}"}
+  
+  // Bad
+  {"url": "{{url1}}/users/{{id}}"}
+  ```
+</Accordion>
+
+<Accordion title="Group related variables">
+  Use consistent naming patterns for related variables:
+  
+  ```json
+  {
+    "authToken": "...",
+    "authScheme": "Bearer",
+    "authExpiry": "..."
+  }
+  ```
+</Accordion>
+
+<Accordion title="Provide sensible defaults">
+  Use `defaultValues` for common cases to reduce prompting:
+  
+  ```json
+  {
+    "url": "{{baseUrl}}/users?page={{page}}&limit={{limit}}",
+    "defaultValues": {
+      "page": "1",
+      "limit": "10"
+    }
+  }
+  ```
+</Accordion>
+
+<Accordion title="Keep secrets in .env files">
+  Never commit API keys or tokens to `config.json`. Use `.env` files instead:
+  
+  ```bash
+  # .env (add to .gitignore)
+  API_KEY=secret_key_here
+  API_SECRET=secret_value_here
+  ```
+</Accordion>
+
+<Accordion title="Document your variables">
+  Add comments in your config.json to explain what variables are expected:
+  
+  ```json
+  {
+    "_comment": "Required variables: API_KEY (from .env), userId (CLI or prompt)",
+    "environments": {
+      "dev": {
+        "variables": {
+          "baseUrl": "http://localhost:3000"
+        }
+      }
+    }
+  }
+  ```
+</Accordion>

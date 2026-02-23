@@ -1,0 +1,172 @@
+---
+title: Installation
+description: Install Mailman CLI using npm, yarn, or from source
+---
+
+# Installation
+
+Mailman can be installed globally using your preferred package manager or built from source for development.
+
+## Install from npm
+
+<Note>
+Global installation requires Node.js 16 or higher.
+</Note>
+
+Install Mailman globally using npm:
+
+```bash
+npm install -g mailman-cli
+```
+
+Verify the installation:
+
+```bash
+mailman --version
+```
+
+## Install with yarn
+
+If you prefer yarn, you can install globally:
+
+```bash
+yarn global add mailman-cli
+```
+
+Verify the installation:
+
+```bash
+mailman --version
+```
+
+## Build from source
+
+For development or to use the latest unreleased features, you can build Mailman from source.
+
+<Steps>
+  <Step title="Clone the repository">
+    Clone the Mailman repository from GitHub:
+
+    ```bash
+    git clone https://github.com/yourusername/mailman.git
+    cd mailman
+    ```
+  </Step>
+
+  <Step title="Install dependencies">
+    Install the project dependencies:
+
+    ```bash
+    yarn install
+    ```
+
+    Or with npm:
+
+    ```bash
+    npm install
+    ```
+  </Step>
+
+  <Step title="Build the project">
+    Compile TypeScript to JavaScript:
+
+    ```bash
+    yarn build
+    ```
+
+    This creates the `dist/` directory with compiled JavaScript files.
+  </Step>
+
+  <Step title="Link globally">
+    Create a global symlink to use the `mailman` command:
+
+    ```bash
+    yarn link
+    ```
+
+    Or with npm:
+
+    ```bash
+    npm link
+    ```
+  </Step>
+
+  <Step title="Verify installation">
+    Test that Mailman is available globally:
+
+    ```bash
+    mailman --version
+    ```
+
+    You should see the version number (e.g., `1.0.0`).
+  </Step>
+</Steps>
+
+## Dependencies
+
+Mailman uses the following key dependencies:
+
+- **axios** - HTTP client for making requests
+- **commander** - CLI framework for command parsing
+- **chalk** - Terminal string styling
+- **prompts** - Interactive command-line prompts
+- **dotenv** - Environment variable loading
+
+All dependencies are installed automatically during setup.
+
+## Uninstalling
+
+To remove Mailman from your system:
+
+<CodeGroup>
+```bash npm
+npm uninstall -g mailman-cli
+```
+
+```bash yarn
+yarn global remove mailman-cli
+```
+
+```bash from source
+yarn unlink
+```
+</CodeGroup>
+
+## Troubleshooting
+
+### Command not found after installation
+
+If you get a "command not found" error after installing:
+
+1. Ensure your global npm/yarn bin directory is in your PATH
+2. For npm, check with: `npm config get prefix`
+3. For yarn, check with: `yarn global bin`
+4. Add the appropriate directory to your PATH in `~/.bashrc`, `~/.zshrc`, or equivalent
+
+### Permission errors during installation
+
+If you encounter permission errors with npm:
+
+```bash
+sudo npm install -g mailman-cli
+```
+
+<Warning>
+Using `sudo` is not recommended. Consider configuring npm to install global packages without sudo using [npm's official guide](https://docs.npmjs.com/resolving-eacces-permissions-errors-when-installing-packages-globally).
+</Warning>
+
+### Build errors from source
+
+If the build fails:
+
+1. Ensure you have Node.js 16 or higher: `node --version`
+2. Clear node_modules and reinstall: `rm -rf node_modules && yarn install`
+3. Try running with verbose logging: `yarn build --verbose`
+
+## Next steps
+
+Now that Mailman is installed, learn how to use it:
+
+<Card title="Quickstart guide" icon="rocket" href="/quickstart">
+  Make your first HTTP request with Mailman
+</Card>

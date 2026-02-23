@@ -1,0 +1,146 @@
+---
+title: mailman list
+description: List all available HTTP request files in your Mailman project
+---
+
+## Syntax
+
+```bash
+mailman list
+```
+
+## Description
+
+The `mailman list` command displays all available HTTP request files in your Mailman project's `requests/` directory. It recursively scans all subdirectories and shows the request name along with its file path.
+
+This command helps you quickly see what requests are available to run or view without manually exploring the file system.
+
+## Requirements
+
+- A valid `config.json` file must exist in your project directory
+- The `requests/` directory should contain `.json` request files
+
+<Warning>
+If no `config.json` is found, you'll see an error message: "No config.json found. Run 'mailman init' first."
+</Warning>
+
+## Output format
+
+For each request found, the command displays:
+
+1. **Request name** (in green) - The `name` field from the request file
+2. **File path** (in gray) - Relative path from the project root
+
+## Usage examples
+
+<CodeGroup>
+
+```bash Basic usage
+mailman list
+```
+
+```bash Sample output
+Available requests:
+
+  Get Users
+  requests/get-users.json
+
+  Create User
+  requests/create-user.json
+
+  Update User
+  requests/users/update-user.json
+
+  Delete User
+  requests/users/delete-user.json
+```
+
+```bash No requests found
+mailman list
+
+# Output:
+No requests found in requests/ directory.
+```
+
+```bash Not initialized
+mailman list
+
+# Output:
+No config.json found. Run 'mailman init' first.
+```
+
+</CodeGroup>
+
+## How it works
+
+The `mailman list` command:
+
+1. Loads your `config.json` to verify the project is initialized
+2. Recursively scans the `requests/` directory for `.json` files
+3. Parses each JSON file to extract the request name
+4. Displays the name and relative path for each valid request
+5. Skips any invalid JSON files or files that don't match the request schema
+
+<Note>
+Only files with a `.json` extension are scanned. The command automatically skips any files that don't have valid request structure.
+</Note>
+
+## Common use cases
+
+### Discovering available requests
+
+When working in a team project or unfamiliar codebase:
+
+```bash
+cd project-directory
+mailman list
+```
+
+### Verifying request organization
+
+Check that your requests are properly organized in subdirectories:
+
+```bash
+# List all requests to see the directory structure
+mailman list
+
+# Example output shows organization:
+# requests/auth/login.json
+# requests/auth/logout.json
+# requests/users/list-users.json
+# requests/users/create-user.json
+```
+
+### Before running requests
+
+Confirm the exact file path before using `mailman run` or `mailman view`:
+
+```bash
+# List to find the path
+mailman list
+
+# Then use the exact path shown
+mailman run requests/users/get-user.json
+```
+
+## Subdirectory support
+
+The command recursively scans subdirectories within `requests/`, allowing you to organize your requests by feature, service, or any structure that makes sense for your project:
+
+```
+requests/
+├── auth/
+│   ├── login.json
+│   └── logout.json
+├── users/
+│   ├── create.json
+│   ├── list.json
+│   └── update.json
+└── posts/
+    ├── create.json
+    └── list.json
+```
+
+<Tip>
+Organize your requests into subdirectories by feature or API endpoint for better project structure. The `mailman list` command will show them all with their full paths.
+</Tip>

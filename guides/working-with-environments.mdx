@@ -1,0 +1,817 @@
+---
+title: "Working with environments"
+description: "Master environment management in Mailman to seamlessly switch between development, staging, and production configurations"
+---
+
+This guide explains how to configure and use multiple environments in Mailman, manage environment-specific variables, and understand the complete variable resolution system.
+
+## What you'll learn
+
+- Configuring multiple environments
+- Switching between environments
+- Using environment-specific variables
+- Understanding variable resolution priority
+- Best practices for environment management
+
+## Understanding environments
+
+Environments in Mailman allow you to maintain different configurations for development, staging, production, and any other contexts you need. Each environment has its own set of variables that are automatically applied when you select that environment.
+
+### Common use cases
+
+- **Different API endpoints**: `localhost` for dev, `staging.api.com` for staging, `api.com` for production
+- **Separate credentials**: Test API keys vs. production keys
+- **Different data**: Test user IDs, product IDs, etc.
+- **Environment-specific settings**: Timeouts, rate limits, feature flags
+
+## Setting up environments
+
+<Steps>
+  <Step title="Define environments in config.json">
+    Open `config.json` and configure your environments:
+
+    ```json
+    {
+      "defaultEnvironment": "dev",
+      "environments": {
+        "dev": {
+          "variables": {
+            "baseUrl": "http://localhost:3000",
+            "apiVersion": "v1",
+            "timeout": "5000"
+          }
+        },
+        "staging": {
+          "variables": {
+            "baseUrl": "https://staging.api.example.com",
+            "apiVersion": "v1",
+            "timeout": "10000"
+          }
+        },
+        "prod": {
+          "variables": {
+            "baseUrl": "https://api.example.com",
+            "apiVersion": "v2",
+            "timeout": "15000"
+          }
+        }
+      }
+    }
+    ```
+
+    <Info>
+      The `defaultEnvironment` is used when you don't specify the `-e` flag.
+    </Info>
+  </Step>
+
+  <Step title="Create environment-specific .env files">
+    Create `.env` files for environment-specific secrets:
+
+    ```bash
+    # .env - Shared variables across all environments
+    DEBUG=true
+    LOG_LEVEL=info
+
+    # .env.dev - Development secrets
+    API_TOKEN=dev_token_abc123
+    DATABASE_URL=localhost:5432
+
+    # .env.staging - Staging secrets
+    API_TOKEN=staging_token_xyz789
+    DATABASE_URL=staging-db.example.com:5432
+
+    # .env.prod - Production secrets
+    API_TOKEN=prod_token_secure456
+    DATABASE_URL=prod-db.example.com:5432
+    ```
+
+    <Warning>
+      Add all `.env*` files to `.gitignore` except `.env.example`.
+    </Warning>
+  </Step>
+
+  <Step title="Create an .env.example template">
+    Provide a template for your team:
+
+    ```bash
+    # .env.example
+    API_TOKEN=your_token_here
+    DATABASE_URL=your_database_url
+    ADMIN_EMAIL=admin@example.com
+    ```
+
+    This file should be committed to version control.
+  </Step>
+</Steps>
+
+## Switching between environments
+
+### Using the -e flag
+
+Switch environments by passing the `-e` flag:
+
+```bash
+# Use default environment (dev)
+mailman run requests/get-users.json
+
+# Use staging environment
+mailman run requests/get-users.json -e staging
+
+# Use production environment
+mailman run requests/get-users.json -e prod
+```
+
+### Preview environment resolution
+
+Before executing requests, preview how variables resolve:
+
+```bash
+# Preview in dev
+mailman view requests/get-users.json
+
+# Preview in staging
+mailman view requests/get-users.json -e staging
+
+# Preview in production
+mailman view requests/get-users.json -e prod
+```
+
+Output shows which environment is active:
+
+```
+Request: Get Users
+Environment: staging
+
+Method: GET
+URL: https://staging.api.example.com/users
+
+Headers:
+  Authorization: Bearer staging_token_xyz789
+```
+
+<Tip>
+  Always use `mailman view` before running production requests to verify the configuration.
+</Tip>
+
+## Variable resolution system
+
+Understanding how Mailman resolves variables is crucial for effective environment management.
+
+### Resolution priority
+
+Variables are resolved in this order (highest to lowest priority):
+
+1. **Runtime `-v` arguments**
+2. **Environment-specific `.env` file** (`.env.<environment>`)
+3. **Shared `.env` file**
+4. **Request `defaultValues`**
+5. **Environment variables in `config.json`**
+
+### How it works
+
+Consider this request:
+
+```json
+{
+  "name": "Get Users",
+  "method": "GET",
+  "url": "{{baseUrl}}/users?limit={{limit}}",
+  "headers": {
+    "Authorization": "Bearer {{API_TOKEN}}"
+  },
+  "defaultValues": {
+    "limit": "10"
+  }
+}
+```
+
+With these configurations:
+
+```json
+// config.json
+{
+  "environments": {
+    "dev": {
+      "variables": {
+        "baseUrl": "http://localhost:3000",
+        "limit": "5"
+      }
+    }
+  }
+}
+```
+
+```bash
+# .env
+API_TOKEN=shared_token
+limit=20
+```
+
+```bash
+# .env.dev
+API_TOKEN=dev_token
+```
+
+When you run:
+
+```bash
+mailman run requests/get-users.json -v limit=50
+```
+
+Variables resolve as:
+- `baseUrl` = `http://localhost:3000` (from config.json)
+- `API_TOKEN` = `dev_token` (from .env.dev, overrides .env)
+- `limit` = `50` (from -v flag, highest priority)
+
+<Info>
+  This priority system gives you maximum flexibility: config for defaults, .env for secrets, and -v for quick overrides.
+</Info>
+
+## Advanced environment patterns
+
+### Pattern 1: Environment-specific API versions
+
+```json
+{
+  "defaultEnvironment": "dev",
+  "environments": {
+    "dev": {
+      "variables": {
+        "baseUrl": "http://localhost:3000",
+        "apiVersion": "v1"
+      }
+    },
+    "prod": {
+      "variables": {
+        "baseUrl": "https://api.example.com",
+        "apiVersion": "v2"
+      }
+    }
+  }
+}
+```
+
+Request file:
+
+```json
+{
+  "name": "Get Users",
+  "method": "GET",
+  "url": "{{baseUrl}}/{{apiVersion}}/users",
+  "headers": {}
+}
+```
+
+Result:
+- Dev: `http://localhost:3000/v1/users`
+- Prod: `https://api.example.com/v2/users`
+
+### Pattern 2: Multiple staging environments
+
+```json
+{
+  "defaultEnvironment": "dev",
+  "environments": {
+    "dev": {
+      "variables": {
+        "baseUrl": "http://localhost:3000"
+      }
+    },
+    "staging-1": {
+      "variables": {
+        "baseUrl": "https://staging-1.api.example.com"
+      }
+    },
+    "staging-2": {
+      "variables": {
+        "baseUrl": "https://staging-2.api.example.com"
+      }
+    },
+    "prod": {
+      "variables": {
+        "baseUrl": "https://api.example.com"
+      }
+    }
+  }
+}
+```
+
+Switch between staging environments:
+
+```bash
+mailman run requests/test.json -e staging-1
+mailman run requests/test.json -e staging-2
+```
+
+### Pattern 3: Feature flags per environment
+
+```json
+{
+  "environments": {
+    "dev": {
+      "variables": {
+        "baseUrl": "http://localhost:3000",
+        "enableNewFeature": "true",
+        "enableDebug": "true"
+      }
+    },
+    "prod": {
+      "variables": {
+        "baseUrl": "https://api.example.com",
+        "enableNewFeature": "false",
+        "enableDebug": "false"
+      }
+    }
+  }
+}
+```
+
+Use in requests:
+
+```json
+{
+  "name": "Create Resource",
+  "method": "POST",
+  "url": "{{baseUrl}}/resources?debug={{enableDebug}}",
+  "body": {
+    "feature_flag": "{{enableNewFeature}}"
+  }
+}
+```
+
+### Pattern 4: Region-specific environments
+
+```json
+{
+  "defaultEnvironment": "us-west",
+  "environments": {
+    "us-west": {
+      "variables": {
+        "baseUrl": "https://us-west.api.example.com",
+        "region": "us-west-1"
+      }
+    },
+    "us-east": {
+      "variables": {
+        "baseUrl": "https://us-east.api.example.com",
+        "region": "us-east-1"
+      }
+    },
+    "eu-west": {
+      "variables": {
+        "baseUrl": "https://eu-west.api.example.com",
+        "region": "eu-west-1"
+      }
+    }
+  }
+}
+```
+
+Test different regions:
+
+```bash
+mailman run requests/get-data.json -e us-west
+mailman run requests/get-data.json -e eu-west
+```
+
+## Working with .env files
+
+### Loading behavior
+
+Mailman determines which `.env` file to load based on the environment:
+
+```bash
+# No -e flag or -e dev
+# Loads: .env (if exists)
+mailman run requests/get-users.json
+
+# -e staging
+# Loads: .env.staging (if exists), falls back to .env
+mailman run requests/get-users.json -e staging
+
+# -e prod
+# Loads: .env.prod (if exists), falls back to .env
+mailman run requests/get-users.json -e prod
+```
+
+<Info>
+  If an environment-specific `.env` file doesn't exist, Mailman falls back to `.env`.
+</Info>
+
+### Organizing .env files
+
+Recommended structure:
+
+```
+my-api-project/
+├── .env                 # Shared, non-sensitive defaults
+├── .env.dev            # Development secrets
+├── .env.staging        # Staging secrets
+├── .env.prod           # Production secrets
+├── .env.example        # Template (committed to git)
+└── .gitignore          # Excludes .env files
+```
+
+### .gitignore setup
+
+```bash
+# .gitignore
+.env
+.env.dev
+.env.staging
+.env.prod
+.env.local
+.env.*.local
+
+# Don't ignore the example file
+!.env.example
+```
+
+## Runtime variable overrides
+
+Runtime variables with `-v` provide maximum flexibility for testing and one-off changes.
+
+### Basic override
+
+```bash
+# Override a single variable
+mailman run requests/get-users.json -v userId=123
+
+# Override multiple variables
+mailman run requests/get-users.json -v userId=123 -v limit=50
+```
+
+### Override with environment
+
+```bash
+# Use prod environment but override the API token
+mailman run requests/get-users.json -e prod -v API_TOKEN=temporary_token
+```
+
+### Testing different scenarios
+
+```bash
+# Test with different user IDs
+mailman run requests/get-user.json -v userId=1
+mailman run requests/get-user.json -v userId=999
+mailman run requests/get-user.json -v userId=invalid
+
+# Test with different pagination
+mailman run requests/get-users.json -v limit=10 -v offset=0
+mailman run requests/get-users.json -v limit=10 -v offset=10
+mailman run requests/get-users.json -v limit=100 -v offset=0
+```
+
+<Tip>
+  Use `-v` for quick testing without modifying config files or .env files.
+</Tip>
+
+## Best practices
+
+### 1. Use clear environment names
+
+```json
+// ✅ Good - Clear and conventional
+{
+  "environments": {
+    "dev": {},
+    "staging": {},
+    "prod": {}
+  }
+}
+
+// ❌ Bad - Unclear names
+{
+  "environments": {
+    "env1": {},
+    "test": {},
+    "live": {}
+  }
+}
+```
+
+### 2. Keep sensitive data in .env files
+
+```json
+// ✅ Good - config.json (safe to commit)
+{
+  "environments": {
+    "dev": {
+      "variables": {
+        "baseUrl": "http://localhost:3000"
+      }
+    }
+  }
+}
+
+// ❌ Bad - config.json (contains secrets)
+{
+  "environments": {
+    "dev": {
+      "variables": {
+        "baseUrl": "http://localhost:3000",
+        "apiKey": "secret_key_123"
+      }
+    }
+  }
+}
+```
+
+Instead, put secrets in `.env.dev`:
+
+```bash
+# .env.dev
+apiKey=secret_key_123
+```
+
+### 3. Set sensible defaults
+
+```json
+{
+  "name": "Get Users",
+  "method": "GET",
+  "url": "{{baseUrl}}/users?limit={{limit}}",
+  "defaultValues": {
+    "limit": "10"
+  }
+}
+```
+
+<Info>
+  Default values prevent prompts for common parameters while still allowing overrides.
+</Info>
+
+### 4. Use descriptive variable names
+
+```json
+// ✅ Good
+{
+  "variables": {
+    "baseUrl": "https://api.example.com",
+    "apiVersion": "v1",
+    "authToken": "..."
+  }
+}
+
+// ❌ Bad
+{
+  "variables": {
+    "url": "https://api.example.com",
+    "ver": "v1",
+    "t": "..."
+  }
+}
+```
+
+### 5. Document your environments
+
+Add comments in your README:
+
+```markdown
+## Environments
+
+- **dev**: Local development (`http://localhost:3000`)
+- **staging**: Staging server (`https://staging.api.example.com`)
+- **prod**: Production (`https://api.example.com`)
+
+### Setup
+
+1. Copy `.env.example` to `.env.dev`
+2. Fill in your development credentials
+3. Run `mailman run requests/get-users.json`
+```
+
+### 6. Preview before executing
+
+Always preview production requests:
+
+```bash
+# Preview first
+mailman view requests/delete-user.json -e prod
+
+# Verify the output, then execute
+mailman run requests/delete-user.json -e prod
+```
+
+<Warning>
+  Use `view` to catch errors before executing destructive operations in production.
+</Warning>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Wrong environment being used">
+    **Symptoms**: Request goes to the wrong URL or uses wrong credentials.
+
+    **Solutions**:
+    1. Check the console output - it shows which environment is active:
+       ```
+       Environment: dev
+       ```
+    
+    2. Explicitly specify the environment:
+       ```bash
+       mailman run requests/get-users.json -e prod
+       ```
+    
+    3. Check `defaultEnvironment` in `config.json`
+  </Accordion>
+
+  <Accordion title="Variables not being replaced">
+    **Symptoms**: Variables appear as `{{variableName}}` in the output.
+
+    **Solutions**:
+    1. Verify the variable exists in the current environment:
+       ```bash
+       mailman view requests/your-request.json
+       ```
+    
+    2. Check the variable name matches exactly (case-sensitive)
+    
+    3. Ensure the variable is defined in one of these places:
+       - `config.json` under the environment
+       - `.env` or `.env.<environment>` file
+       - Request `defaultValues`
+    
+    4. Try providing it via runtime flag:
+       ```bash
+       mailman run requests/test.json -v missingVar=value
+       ```
+  </Accordion>
+
+  <Accordion title=".env file not loading">
+    **Symptoms**: Variables from .env file aren't being used.
+
+    **Solutions**:
+    1. Verify the file exists and is named correctly:
+       ```bash
+       ls -la .env*
+       ```
+    
+    2. Check you're in the correct directory (where `config.json` is)
+    
+    3. Verify the variable name in `.env` matches what's in the request
+    
+    4. For environment-specific files, check the naming:
+       ```bash
+       # For -e staging, file should be named:
+       .env.staging
+       
+       # NOT:
+       .env-staging or env.staging
+       ```
+  </Accordion>
+
+  <Accordion title="Can't switch to a specific environment">
+    **Symptoms**: Error when using `-e` flag.
+
+    **Solutions**:
+    1. Verify the environment exists in `config.json`:
+       ```json
+       {
+         "environments": {
+           "dev": {},
+           "staging": {},
+           "prod": {}
+         }
+       }
+       ```
+    
+    2. Check for typos in the environment name:
+       ```bash
+       # ❌ Wrong
+       mailman run requests/test.json -e production
+       
+       # ✅ Correct (matches config.json)
+       mailman run requests/test.json -e prod
+       ```
+  </Accordion>
+</AccordionGroup>
+
+## Example: Complete environment setup
+
+Here's a complete example of a well-configured project:
+
+### Directory structure
+
+```
+my-api-project/
+├── config.json
+├── .env
+├── .env.dev
+├── .env.staging
+├── .env.prod
+├── .env.example
+├── .gitignore
+└── requests/
+    ├── auth/
+    │   └── login.json
+    └── users/
+        ├── get-users.json
+        ├── get-user.json
+        └── create-user.json
+```
+
+### config.json
+
+```json
+{
+  "defaultEnvironment": "dev",
+  "environments": {
+    "dev": {
+      "variables": {
+        "baseUrl": "http://localhost:3000",
+        "apiVersion": "v1",
+        "timeout": "5000"
+      }
+    },
+    "staging": {
+      "variables": {
+        "baseUrl": "https://staging.api.example.com",
+        "apiVersion": "v1",
+        "timeout": "10000"
+      }
+    },
+    "prod": {
+      "variables": {
+        "baseUrl": "https://api.example.com",
+        "apiVersion": "v2",
+        "timeout": "15000"
+      }
+    }
+  }
+}
+```
+
+### .env files
+
+```bash
+# .env - Shared defaults
+DEBUG=true
+LOG_LEVEL=info
+
+# .env.dev
+API_TOKEN=dev_token_abc123
+DB_URL=localhost:5432
+
+# .env.staging
+API_TOKEN=staging_token_xyz789
+DB_URL=staging-db.example.com:5432
+
+# .env.prod
+API_TOKEN=prod_token_secure456
+DB_URL=prod-db.example.com:5432
+
+# .env.example (committed to git)
+API_TOKEN=your_token_here
+DB_URL=your_database_url
+```
+
+### .gitignore
+
+```bash
+.env
+.env.dev
+.env.staging
+.env.prod
+.env.local
+.env.*.local
+!.env.example
+```
+
+### Usage
+
+```bash
+# Development
+mailman run requests/users/get-users.json
+
+# Staging
+mailman run requests/users/get-users.json -e staging
+
+# Production (preview first!)
+mailman view requests/users/get-users.json -e prod
+mailman run requests/users/get-users.json -e prod
+
+# Override for testing
+mailman run requests/users/get-user.json -e staging -v userId=999
+```
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Authentication" icon="key" href="/guides/authentication">
+    Learn how to handle authentication and credentials
+  </Card>
+  
+  <Card title="Managing cookies" icon="cookie" href="/guides/managing-cookies">
+    Use cookie groups for session-based authentication
+  </Card>
+  
+  <Card title="Troubleshooting" icon="wrench" href="/guides/troubleshooting">
+    Solutions to common issues
+  </Card>
+  
+  <Card title="Getting started" icon="rocket" href="/guides/getting-started">
+    Back to the getting started guide
+  </Card>
+</CardGroup>

@@ -1,0 +1,152 @@
+---
+title: mailman init
+description: Initialize a new Mailman project with sample configuration and request files
+---
+
+## Syntax
+
+```bash
+mailman init
+```
+
+## Description
+
+The `mailman init` command sets up a new Mailman project in your current directory. It creates a configuration file with environment definitions and a requests directory with sample HTTP request files to help you get started quickly.
+
+This command is typically the first command you run when setting up Mailman in a new project.
+
+## What it creates
+
+When you run `mailman init`, the following files and directories are created:
+
+1. **config.json** - Project configuration with environment definitions
+2. **requests/** - Directory for storing request files
+3. **requests/get-users.json** - Sample GET request
+4. **requests/create-user.json** - Sample POST request
+
+<Note>
+If any of these files already exist, `mailman init` will skip them and preserve your existing configuration.
+</Note>
+
+## Generated configuration
+
+The `config.json` file created includes two environments:
+
+```json
+{
+  "defaultEnvironment": "dev",
+  "environments": {
+    "dev": {
+      "variables": {
+        "baseUrl": "http://localhost:3000",
+        "exampleVariable": "dev-example-variable"
+      }
+    },
+    "prod": {
+      "variables": {
+        "baseUrl": "https://api.example.com",
+        "exampleVariable": "prod-example-variable"
+      }
+    }
+  }
+}
+```
+
+## Sample requests
+
+Two sample request files are generated to demonstrate different HTTP methods:
+
+<CodeGroup>
+
+```json requests/get-users.json
+{
+  "name": "Get Users",
+  "method": "GET",
+  "url": "{{baseUrl}}/users",
+  "headers": {
+    "Authorization": "Bearer {{API_KEY}}"
+  }
+}
+```
+
+```json requests/create-user.json
+{
+  "name": "Create User",
+  "method": "POST",
+  "url": "{{baseUrl}}/users",
+  "headers": {
+    "Authorization": "Bearer {{API_KEY}}",
+    "Content-Type": "application/json"
+  },
+  "body": {
+    "name": "John Doe",
+    "email": "john@example.com"
+  }
+}
+```
+
+</CodeGroup>
+
+## Usage examples
+
+<CodeGroup>
+
+```bash Basic initialization
+mailman init
+```
+
+```bash Output
+Created config.json
+Created requests/ directory
+Created requests/get-users.json
+Created requests/create-user.json
+
+Mailman initialized successfully!
+Run 'mailman list' to see available requests
+```
+
+```bash Already initialized
+# If files already exist
+mailman init
+
+# Output:
+config.json already exists, skipping...
+get-users.json already exists, skipping...
+create-user.json already exists, skipping...
+```
+
+</CodeGroup>
+
+## Common use cases
+
+### Starting a new project
+
+```bash
+# Create a new directory for your API requests
+mkdir my-api-project
+cd my-api-project
+
+# Initialize Mailman
+mailman init
+
+# View the sample requests
+mailman list
+```
+
+### Converting from Postman
+
+If you're migrating from Postman, initialize Mailman in your project directory and then replace the sample requests with your own:
+
+```bash
+# Initialize the structure
+mailman init
+
+# Remove sample files and add your own
+rm requests/*.json
+# Create your requests using mailman new or manually
+mailman new
+```
+
+<Tip>
+After running `mailman init`, use `mailman list` to verify your project was set up correctly.
+</Tip>

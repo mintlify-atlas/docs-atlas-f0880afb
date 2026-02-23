@@ -1,0 +1,565 @@
+---
+title: "Authentication"
+description: "Learn how to handle authentication in Mailman using Bearer tokens, API keys, and custom headers"
+---
+
+This guide covers different authentication methods supported by Mailman, including Bearer tokens, API keys, and custom authentication headers. You'll learn how to securely manage credentials and implement various authentication patterns.
+
+## What you'll learn
+
+- Setting up Bearer token authentication
+- Managing API keys securely
+- Using custom authentication headers
+- Handling authentication across environments
+- Best practices for credential management
+
+## Bearer token authentication
+
+Bearer tokens are the most common authentication method for REST APIs. Here's how to implement them in Mailman.
+
+<Steps>
+  <Step title="Add the Authorization header">
+    In your request file, add the Bearer token header:
+
+    ```json
+    {
+      "name": "Get Protected Resource",
+      "method": "GET",
+      "url": "{{baseUrl}}/api/protected",
+      "headers": {
+        "Authorization": "Bearer {{API_TOKEN}}"
+      }
+    }
+    ```
+
+    <Info>
+      The `Bearer` prefix is required by most APIs following OAuth 2.0 standards.
+    </Info>
+  </Step>
+
+  <Step title="Store the token securely">
+    Never hardcode tokens in request files. Instead, use environment variables.
+
+    Create a `.env` file:
+
+    ```bash
+    API_TOKEN=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+    ```
+
+    <Warning>
+      Add `.env` to your `.gitignore` to prevent committing sensitive credentials.
+    </Warning>
+  </Step>
+
+  <Step title="Run the authenticated request">
+    ```bash
+    mailman run requests/get-protected.json
+    ```
+
+    Mailman automatically loads the token from `.env` and includes it in the request.
+  </Step>
+</Steps>
+
+## API key authentication
+
+Many APIs use simple API keys for authentication. These can be passed in headers or as query parameters.
+
+### Header-based API keys
+
+```json
+{
+  "name": "Get Data with API Key",
+  "method": "GET",
+  "url": "{{baseUrl}}/api/data",
+  "headers": {
+    "X-API-Key": "{{API_KEY}}"
+  }
+}
+```
+
+### Query parameter API keys
+
+```json
+{
+  "name": "Get Data with API Key",
+  "method": "GET",
+  "url": "{{baseUrl}}/api/data?api_key={{API_KEY}}",
+  "headers": {}
+}
+```
+
+<Note>
+  Check your API documentation to determine whether the API key should be in the header or URL.
+</Note>
+
+## Managing credentials across environments
+
+Different environments often require different credentials. Here's how to manage them effectively.
+
+<Steps>
+  <Step title="Create environment-specific .env files">
+    ```bash
+    # .env - Shared across all environments
+    DEBUG=true
+    TIMEOUT=5000
+
+    # .env.dev - Development credentials
+    API_TOKEN=dev_token_abc123
+    API_KEY=dev_key_xyz789
+
+    # .env.prod - Production credentials
+    API_TOKEN=prod_token_secure123
+    API_KEY=prod_key_secure789
+    ```
+
+    <Tip>
+      Mailman automatically loads the correct `.env.<environment>` file based on the `-e` flag.
+    </Tip>
+  </Step>
+
+  <Step title="Configure base URLs per environment">
+    In `config.json`:
+
+    ```json
+    {
+      "defaultEnvironment": "dev",
+      "environments": {
+        "dev": {
+          "variables": {
+            "baseUrl": "http://localhost:3000"
+          }
+        },
+        "prod": {
+          "variables": {
+            "baseUrl": "https://api.production.com"
+          }
+        }
+      }
+    }
+    ```
+  </Step>
+
+  <Step title="Run with environment selection">
+    ```bash
+    # Uses .env.dev and dev baseUrl
+    mailman run requests/get-data.json
+
+    # Uses .env.prod and prod baseUrl
+    mailman run requests/get-data.json -e prod
+    ```
+  </Step>
+</Steps>
+
+## Variable resolution priority
+
+Understanding how Mailman resolves authentication variables helps you organize credentials effectively.
+
+Variables are resolved in this order (highest priority first):
+
+1. **Runtime `-v` arguments** - Highest priority
+   ```bash
+   mailman run requests/get-data.json -v API_TOKEN=override_token
+   ```
+
+2. **Environment-specific `.env` file** - `.env.dev`, `.env.prod`, etc.
+   ```bash
+   # In .env.prod
+   API_TOKEN=prod_token
+   ```
+
+3. **Shared `.env` file** - Fallback for shared credentials
+   ```bash
+   # In .env
+   API_TOKEN=shared_token
+   ```
+
+4. **Request defaultValues** - Request-level defaults
+   ```json
+   {
+     "defaultValues": {
+       "API_TOKEN": "fallback_token"
+     }
+   }
+   ```
+
+5. **Environment variables in config.json** - Lowest priority
+   ```json
+   {
+     "environments": {
+       "dev": {
+         "variables": {
+           "API_TOKEN": "config_token"
+         }
+       }
+     }
+   }
+   ```
+
+<Info>
+  Use higher priority methods for sensitive credentials and lower priority for shared configuration.
+</Info>
+
+## Common authentication patterns
+
+### Pattern 1: Basic Authentication
+
+For APIs using HTTP Basic Auth:
+
+```json
+{
+  "name": "Basic Auth Request",
+  "method": "GET",
+  "url": "{{baseUrl}}/api/data",
+  "headers": {
+    "Authorization": "Basic {{BASIC_AUTH_TOKEN}}"
+  }
+}
+```
+
+Generate the token:
+
+```bash
+# In your terminal
+echo -n "username:password" | base64
+# Output: dXNlcm5hbWU6cGFzc3dvcmQ=
+```
+
+Then add to `.env`:
+
+```bash
+BASIC_AUTH_TOKEN=dXNlcm5hbWU6cGFzc3dvcmQ=
+```
+
+### Pattern 2: Multiple authentication headers
+
+Some APIs require multiple authentication headers:
+
+```json
+{
+  "name": "Multi-Header Auth",
+  "method": "POST",
+  "url": "{{baseUrl}}/api/data",
+  "headers": {
+    "X-API-Key": "{{API_KEY}}",
+    "X-Client-ID": "{{CLIENT_ID}}",
+    "X-Client-Secret": "{{CLIENT_SECRET}}"
+  }
+}
+```
+
+### Pattern 3: Refresh token flow
+
+For OAuth flows, create separate requests:
+
+```json
+// requests/auth/get-token.json
+{
+  "name": "Get Access Token",
+  "method": "POST",
+  "url": "{{authUrl}}/oauth/token",
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "body": {
+    "grant_type": "refresh_token",
+    "refresh_token": "{{REFRESH_TOKEN}}",
+    "client_id": "{{CLIENT_ID}}",
+    "client_secret": "{{CLIENT_SECRET}}"
+  }
+}
+```
+
+```json
+// requests/api/get-data.json
+{
+  "name": "Get Protected Data",
+  "method": "GET",
+  "url": "{{baseUrl}}/api/data",
+  "headers": {
+    "Authorization": "Bearer {{ACCESS_TOKEN}}"
+  }
+}
+```
+
+Workflow:
+
+```bash
+# 1. Get a new access token
+mailman run requests/auth/get-token.json
+
+# 2. Copy the access token from the response
+# 3. Use it in subsequent requests
+mailman run requests/api/get-data.json -v ACCESS_TOKEN=<token-from-step-1>
+```
+
+### Pattern 4: Custom authentication schemes
+
+For proprietary authentication:
+
+```json
+{
+  "name": "Custom Auth Request",
+  "method": "GET",
+  "url": "{{baseUrl}}/api/data",
+  "headers": {
+    "X-Custom-Auth": "{{AUTH_SCHEME}} {{AUTH_TOKEN}}",
+    "X-Timestamp": "{{timestamp}}",
+    "X-Signature": "{{signature}}"
+  }
+}
+```
+
+## Testing authentication
+
+<Steps>
+  <Step title="Preview the resolved request">
+    Before executing, verify credentials are resolved correctly:
+
+    ```bash
+    mailman view requests/get-protected.json
+    ```
+
+    Check the output:
+    ```
+    Headers:
+      Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+    ```
+
+    <Warning>
+      Be careful when sharing `mailman view` output as it contains actual credentials.
+    </Warning>
+  </Step>
+
+  <Step title="Test with invalid credentials">
+    Verify your error handling:
+
+    ```bash
+    mailman run requests/get-protected.json -v API_TOKEN=invalid_token
+    ```
+
+    Expected response:
+    ```
+    Status: 401 Unauthorized
+    ```
+  </Step>
+
+  <Step title="Test environment switching">
+    Ensure credentials work in all environments:
+
+    ```bash
+    # Test dev
+    mailman run requests/get-protected.json -e dev
+
+    # Test prod (be careful!)
+    mailman view requests/get-protected.json -e prod
+    ```
+  </Step>
+</Steps>
+
+## Security best practices
+
+<Warning>
+  Follow these practices to keep your credentials secure.
+</Warning>
+
+### DO: Use .env files for credentials
+
+```bash
+# .env
+API_TOKEN=your_secret_token
+API_KEY=your_secret_key
+```
+
+### DON'T: Hardcode credentials in request files
+
+```json
+// ❌ Bad - Credentials in version control
+{
+  "headers": {
+    "Authorization": "Bearer actual_token_here"
+  }
+}
+
+// ✅ Good - Using variables
+{
+  "headers": {
+    "Authorization": "Bearer {{API_TOKEN}}"
+  }
+}
+```
+
+### DO: Add .env files to .gitignore
+
+```bash
+# .gitignore
+.env
+.env.*
+!.env.example
+```
+
+### DO: Provide .env.example for teammates
+
+```bash
+# .env.example
+API_TOKEN=your_token_here
+API_KEY=your_key_here
+BASE_URL=https://api.example.com
+```
+
+### DO: Use runtime variables for temporary testing
+
+```bash
+# Test with a temporary token without modifying files
+mailman run requests/get-data.json -v API_TOKEN=test_token_123
+```
+
+### DON'T: Share .env files
+
+Instead, share instructions:
+
+```markdown
+## Setup
+
+1. Copy `.env.example` to `.env`
+2. Fill in your credentials from [credential source]
+3. Run `mailman run requests/get-data.json`
+```
+
+## Troubleshooting authentication
+
+<AccordionGroup>
+  <Accordion title="401 Unauthorized error">
+    Common causes:
+    - **Expired token**: Get a fresh token from your auth provider
+    - **Wrong environment**: Verify you're using the correct `.env.<environment>` file
+    - **Typo in variable name**: Check that `{{API_TOKEN}}` matches the variable in `.env`
+    - **Missing Bearer prefix**: Ensure header includes `Bearer {{API_TOKEN}}`
+
+    Debug:
+    ```bash
+    # Check what's being sent
+    mailman view requests/your-request.json
+    ```
+  </Accordion>
+
+  <Accordion title="Variable not replaced">
+    If you see `{{API_TOKEN}}` in the request output:
+
+    1. Check the variable name is correct (case-sensitive)
+    2. Verify `.env` file exists and contains the variable
+    3. Try providing it via runtime flag:
+       ```bash
+       mailman run requests/get-data.json -v API_TOKEN=your_token
+       ```
+    4. Check you're in the correct directory
+  </Accordion>
+
+  <Accordion title="Wrong credentials used">
+    If the wrong credentials are being used:
+
+    1. Check which `.env` file is loaded:
+       ```bash
+       # Default environment
+       mailman run requests/get-data.json
+       # Loads .env
+
+       # Specific environment
+       mailman run requests/get-data.json -e prod
+       # Loads .env.prod
+       ```
+
+    2. Verify variable resolution priority (runtime > .env.{`<env>`} > .env > defaultValues > config.json)
+
+    3. Use `-v` to force a specific value for testing
+  </Accordion>
+
+  <Accordion title="403 Forbidden error">
+    Your credentials are valid but lack permissions:
+    - Verify the API key/token has required scopes
+    - Check if the endpoint requires additional authentication
+    - Ensure you're using the correct account/workspace
+  </Accordion>
+</AccordionGroup>
+
+## Real-world examples
+
+### Example: GitHub API authentication
+
+```json
+// requests/github/get-repos.json
+{
+  "name": "Get GitHub Repositories",
+  "method": "GET",
+  "url": "https://api.github.com/user/repos",
+  "headers": {
+    "Authorization": "Bearer {{GITHUB_TOKEN}}",
+    "Accept": "application/vnd.github.v3+json"
+  }
+}
+```
+
+```bash
+# .env
+GITHUB_TOKEN=ghp_your_personal_access_token
+```
+
+### Example: Stripe API authentication
+
+```json
+// requests/stripe/list-customers.json
+{
+  "name": "List Stripe Customers",
+  "method": "GET",
+  "url": "https://api.stripe.com/v1/customers",
+  "headers": {
+    "Authorization": "Bearer {{STRIPE_SECRET_KEY}}"
+  }
+}
+```
+
+```bash
+# .env.dev
+STRIPE_SECRET_KEY=sk_test_...
+
+# .env.prod
+STRIPE_SECRET_KEY=sk_live_...
+```
+
+### Example: AWS Signature V4 (simplified)
+
+```json
+{
+  "name": "AWS API Request",
+  "method": "GET",
+  "url": "{{AWS_ENDPOINT}}/api/resource",
+  "headers": {
+    "Authorization": "{{AWS_AUTH_HEADER}}",
+    "X-Amz-Date": "{{timestamp}}",
+    "X-Amz-Content-Sha256": "{{content_hash}}"
+  }
+}
+```
+
+<Note>
+  For complex auth schemes like AWS Signature V4, you may need to pre-compute values and pass them via `-v` flags.
+</Note>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Working with environments" icon="layer-group" href="/guides/working-with-environments">
+    Deep dive into environment management and variable resolution
+  </Card>
+  
+  <Card title="Managing cookies" icon="cookie" href="/guides/managing-cookies">
+    Learn about session-based authentication with cookies
+  </Card>
+  
+  <Card title="Troubleshooting" icon="wrench" href="/guides/troubleshooting">
+    Solutions to common authentication and request issues
+  </Card>
+  
+  <Card title="Getting started" icon="rocket" href="/guides/getting-started">
+    Back to the getting started guide
+  </Card>
+</CardGroup>

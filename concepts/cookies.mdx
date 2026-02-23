@@ -1,0 +1,451 @@
+---
+title: Cookies
+description: Learn how to manage and use cookie groups in Mailman for authenticated requests
+---
+
+Cookie groups allow you to manage sets of cookies for authenticated requests. This is especially useful when testing APIs that use cookie-based authentication or session management.
+
+## What are cookie groups?
+
+A cookie group is a named collection of cookies that can be attached to requests. Each group contains key-value pairs representing cookie names and values:
+
+```json
+{
+  "name": "user-session",
+  "cookies": {
+    "sessionId": "abc123xyz",
+    "userId": "user-456",
+    "csrfToken": "token-789"
+  }
+}
+```
+
+<Info>
+Based on the `CookieGroup` interface in `src/types.ts:12-15`
+</Info>
+
+## Cookie group structure
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `name` | `string` | Display name for the cookie group |
+| `cookies` | `Record<string, string>` | Key-value pairs of cookie names and values |
+
+## Configuring cookie groups
+
+Cookie groups are defined within environments in your `config.json`:
+
+```json
+{
+  "defaultEnvironment": "dev",
+  "environments": {
+    "dev": {
+      "variables": {
+        "baseUrl": "http://localhost:3000"
+      },
+      "cookies": [
+        {
+          "name": "admin-session",
+          "cookies": {
+            "sessionId": "admin-session-xyz",
+            "role": "admin",
+            "permissions": "read,write,delete"
+          }
+        },
+        {
+          "name": "user-session",
+          "cookies": {
+            "sessionId": "user-session-abc",
+            "role": "user",
+            "permissions": "read"
+          }
+        }
+      ]
+    }
+  }
+}
+```
+
+<Note>
+The `cookies` field is optional in the environment configuration. See `src/types.ts:21-24`
+</Note>
+
+## Enabling cookies in requests
+
+To use cookies with a request, set the `cookies` field to `true` in your request file:
+
+```json
+{
+  "name": "Get Protected Resource",
+  "method": "GET",
+  "url": "{{baseUrl}}/admin/users",
+  "cookies": true
+}
+```
+
+<Warning>
+If `cookies` is set to `false` or omitted, no cookies will be attached even if cookie groups are defined in the environment.
+</Warning>
+
+## How cookie selection works
+
+When you run a request with `cookies: true`, Mailman's behavior depends on how many cookie groups are available:
+
+<Tabs>
+  <Tab title="Single cookie group">
+    If the environment has only one cookie group, it's automatically selected:
+    
+    ```json
+    {
+      "cookies": [
+        {
+          "name": "default-session",
+          "cookies": {"sessionId": "abc123"}
+        }
+      ]
+    }
+    ```
+    
+    No prompt appears—the cookies are applied automatically.
+  </Tab>
+  
+  <Tab title="Multiple cookie groups">
+    If the environment has multiple cookie groups, you'll be prompted to choose:
+    
+    ```bash
+    $ mailman run requests/get-users.json
+    ? select cookie › 
+    ❯ admin-session
+      user-session
+      guest-session
+    ```
+    
+    Select the appropriate group for your request.
+  </Tab>
+  
+  <Tab title="No cookie groups">
+    If the environment has no cookie groups defined, the request runs without cookies even if `cookies: true`.
+  </Tab>
+</Tabs>
+
+<Info>
+Cookie selection logic is implemented in `src/utils/resolveCookieHeaders.ts:4-46`
+</Info>
+
+## Cookie header format
+
+Mailman converts cookie groups into a standard HTTP `Cookie` header:
+
+```json
+// Cookie group
+{
+  "cookies": {
+    "sessionId": "abc123",
+    "userId": "user-456",
+    "theme": "dark"
+  }
+}
+```
+
+Becomes:
+
+```
+Cookie: sessionId=abc123; userId=user-456; theme=dark
+```
+
+<Note>
+The conversion follows the standard cookie header format with semicolon separators. See `src/utils/resolveCookieHeaders.ts:31-37`
+</Note>
+
+## Complete example
+
+Here's a full example of using cookie groups:
+
+<Tabs>
+  <Tab title="config.json">
+    ```json
+    {
+      "defaultEnvironment": "dev",
+      "environments": {
+        "dev": {
+          "variables": {
+            "baseUrl": "http://localhost:3000"
+          },
+          "cookies": [
+            {
+              "name": "authenticated-user",
+              "cookies": {
+                "connect.sid": "s%3A1a2b3c4d5e6f.signature",
+                "userId": "12345",
+                "sessionExpiry": "1234567890"
+              }
+            },
+            {
+              "name": "anonymous-user",
+              "cookies": {
+                "guestId": "guest-xyz",
+                "tracking": "enabled"
+              }
+            }
+          ]
+        }
+      }
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Request file">
+    ```json
+    {
+      "name": "Get User Dashboard",
+      "method": "GET",
+      "url": "{{baseUrl}}/dashboard",
+      "cookies": true
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Execution">
+    ```bash
+    $ mailman run requests/dashboard.json
+    ? select cookie › 
+    ❯ authenticated-user
+      anonymous-user
+    
+    # After selection:
+    Running: Get User Dashboard
+    Environment: dev
+    GET http://localhost:3000/dashboard
+    
+    # Request includes:
+    # Cookie: connect.sid=s%3A1a2b3c4d5e6f.signature; userId=12345; sessionExpiry=1234567890
+    ```
+  </Tab>
+</Tabs>
+
+## Use cases
+
+<Accordion title="Testing different user roles">
+  Create cookie groups for different user types:
+  
+  ```json
+  {
+    "cookies": [
+      {
+        "name": "admin",
+        "cookies": {
+          "sessionId": "admin-session",
+          "role": "admin"
+        }
+      },
+      {
+        "name": "editor",
+        "cookies": {
+          "sessionId": "editor-session",
+          "role": "editor"
+        }
+      },
+      {
+        "name": "viewer",
+        "cookies": {
+          "sessionId": "viewer-session",
+          "role": "viewer"
+        }
+      }
+    ]
+  }
+  ```
+  
+  Test permissions by switching between cookie groups.
+</Accordion>
+
+<Accordion title="Session-based authentication">
+  Store session cookies after login:
+  
+  ```json
+  {
+    "name": "active-session",
+    "cookies": {
+      "JSESSIONID": "3E8B9A7C6D5F2E1A",
+      "rememberMe": "true",
+      "lastLogin": "2026-02-23T10:30:00Z"
+    }
+  }
+  ```
+</Accordion>
+
+<Accordion title="Multi-tenant testing">
+  Test different tenants or organizations:
+  
+  ```json
+  {
+    "cookies": [
+      {
+        "name": "tenant-acme",
+        "cookies": {
+          "tenantId": "acme-corp",
+          "orgToken": "acme-token-123"
+        }
+      },
+      {
+        "name": "tenant-globex",
+        "cookies": {
+          "tenantId": "globex-inc",
+          "orgToken": "globex-token-456"
+        }
+      }
+    ]
+  }
+  ```
+</Accordion>
+
+<Accordion title="Development vs production sessions">
+  Maintain different sessions per environment:
+  
+  ```json
+  {
+    "environments": {
+      "dev": {
+        "cookies": [{
+          "name": "dev-session",
+          "cookies": {"sessionId": "dev-abc"}
+        }]
+      },
+      "prod": {
+        "cookies": [{
+          "name": "prod-session",
+          "cookies": {"sessionId": "prod-xyz"}
+        }]
+      }
+    }
+  }
+  ```
+</Accordion>
+
+## Cookie lifecycle
+
+The cookie resolution process happens at request execution time:
+
+<Steps>
+  <Step title="Check request configuration">
+    Mailman checks if `cookies: true` is set in the request file.
+    
+    See `src/commands/run.ts:101-103`
+  </Step>
+  
+  <Step title="Load cookie groups">
+    Mailman loads cookie groups from the active environment configuration.
+  </Step>
+  
+  <Step title="Select cookie group">
+    If multiple groups exist, prompt the user to select one. If only one exists, use it automatically.
+    
+    See `src/utils/resolveCookieHeaders.ts:17-30`
+  </Step>
+  
+  <Step title="Format cookies">
+    Convert the selected cookie group into a `Cookie` header string.
+    
+    See `src/utils/resolveCookieHeaders.ts:31-44`
+  </Step>
+  
+  <Step title="Attach to request">
+    Add the `Cookie` header to the request before execution.
+  </Step>
+</Steps>
+
+## Best practices
+
+<Accordion title="Use descriptive names">
+  Name cookie groups clearly to indicate their purpose:
+  
+  ```json
+  // Good
+  {"name": "admin-authenticated"}
+  {"name": "guest-session"}
+  {"name": "premium-user"}
+  
+  // Bad
+  {"name": "cookies1"}
+  {"name": "session"}
+  {"name": "test"}
+  ```
+</Accordion>
+
+<Accordion title="Keep cookies fresh">
+  Update session cookies regularly, especially for time-sensitive tokens:
+  
+  ```json
+  {
+    "cookies": {
+      "sessionId": "current-session-id",
+      "expiresAt": "2026-02-24T10:00:00Z",
+      "_note": "Updated on 2026-02-23"
+    }
+  }
+  ```
+</Accordion>
+
+<Accordion title="Separate by environment">
+  Define different cookie groups for each environment:
+  
+  ```json
+  {
+    "environments": {
+      "dev": {
+        "cookies": [{
+          "name": "dev-user",
+          "cookies": {"devSessionId": "dev123"}
+        }]
+      },
+      "prod": {
+        "cookies": [{
+          "name": "prod-user",
+          "cookies": {"prodSessionId": "prod456"}
+        }]
+      }
+    }
+  }
+  ```
+</Accordion>
+
+<Accordion title="Don't commit sensitive cookies">
+  If cookies contain sensitive data, consider using environment variables:
+  
+  ```json
+  {
+    "cookies": {
+      "sessionId": "{{SESSION_ID}}",
+      "apiToken": "{{API_TOKEN}}"
+    }
+  }
+  ```
+  
+  Then define these in your `.env` file (which should be in `.gitignore`).
+</Accordion>
+
+<Accordion title="Test with multiple cookie groups">
+  Create cookie groups for different test scenarios:
+  
+  ```json
+  {
+    "cookies": [
+      {"name": "valid-session", "cookies": {"sessionId": "valid"}},
+      {"name": "expired-session", "cookies": {"sessionId": "expired"}},
+      {"name": "invalid-session", "cookies": {"sessionId": "invalid"}}
+    ]
+  }
+  ```
+  
+  This lets you quickly test different authentication states.
+</Accordion>
+
+## Limitations
+
+<Warning>
+Mailman cookie groups are static—they don't automatically update when the server sets new cookies. You need to manually update cookie values in your config.
+</Warning>
+
+<Note>
+Cookie groups cannot use variable interpolation in the cookie values at the config level, but you can work around this by using variables in conjunction with .env files.
+</Note>

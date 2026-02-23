@@ -1,0 +1,262 @@
+---
+title: Request files
+description: Learn how request files work in Mailman and how to structure them
+---
+
+Request files are JSON documents that define HTTP requests you want to execute. They contain all the information needed to make an API call, including the URL, method, headers, and body.
+
+## Request file structure
+
+Every request file must include three required fields:
+
+```json
+{
+  "name": "Get Users",
+  "method": "GET",
+  "url": "{{baseUrl}}/users"
+}
+```
+
+### Required fields
+
+<Info>
+Based on the `RequestFile` interface in `src/types.ts:3-11`
+</Info>
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `name` | `string` | Display name for the request |
+| `method` | `HttpMethod` | HTTP method: GET, POST, PUT, PATCH, or DELETE |
+| `url` | `string` | Target URL (supports variable interpolation) |
+
+### Optional fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `headers` | `Record<string, string>` | HTTP headers as key-value pairs |
+| `body` | `unknown` | Request body (usually an object or string) |
+| `defaultValues` | `Record<string, string>` | Default variable values for this request |
+| `cookies` | `boolean` | Enable cookie group selection for this request |
+
+## Complete request example
+
+Here's a complete example of a POST request with all available fields:
+
+```json
+{
+  "name": "Create User",
+  "method": "POST",
+  "url": "{{baseUrl}}/users",
+  "headers": {
+    "Authorization": "Bearer {{API_KEY}}",
+    "Content-Type": "application/json"
+  },
+  "body": {
+    "name": "John Doe",
+    "email": "john@example.com",
+    "role": "{{userRole}}"
+  },
+  "defaultValues": {
+    "userRole": "user"
+  },
+  "cookies": true
+}
+```
+
+<Note>
+This example shows variable interpolation with `{{baseUrl}}`, `{{API_KEY}}`, and `{{userRole}}`. Learn more in the [Variables](/concepts/variables) guide.
+</Note>
+
+## HTTP methods
+
+Mailman supports five standard HTTP methods:
+
+<Tabs>
+  <Tab title="GET">
+    Used for retrieving data from the server.
+    
+    ```json
+    {
+      "name": "Get User",
+      "method": "GET",
+      "url": "{{baseUrl}}/users/123"
+    }
+    ```
+  </Tab>
+  
+  <Tab title="POST">
+    Used for creating new resources.
+    
+    ```json
+    {
+      "name": "Create User",
+      "method": "POST",
+      "url": "{{baseUrl}}/users",
+      "body": {
+        "name": "Jane Doe"
+      }
+    }
+    ```
+  </Tab>
+  
+  <Tab title="PUT">
+    Used for updating entire resources.
+    
+    ```json
+    {
+      "name": "Update User",
+      "method": "PUT",
+      "url": "{{baseUrl}}/users/123",
+      "body": {
+        "name": "Jane Smith",
+        "email": "jane@example.com"
+      }
+    }
+    ```
+  </Tab>
+  
+  <Tab title="PATCH">
+    Used for partial updates.
+    
+    ```json
+    {
+      "name": "Update User Email",
+      "method": "PATCH",
+      "url": "{{baseUrl}}/users/123",
+      "body": {
+        "email": "newemail@example.com"
+      }
+    }
+    ```
+  </Tab>
+  
+  <Tab title="DELETE">
+    Used for deleting resources.
+    
+    ```json
+    {
+      "name": "Delete User",
+      "method": "DELETE",
+      "url": "{{baseUrl}}/users/123"
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Request headers
+
+Headers are specified as a key-value object and support variable interpolation:
+
+```json
+{
+  "headers": {
+    "Authorization": "Bearer {{API_KEY}}",
+    "Content-Type": "application/json",
+    "X-Custom-Header": "{{customValue}}"
+  }
+}
+```
+
+<Tip>
+Common headers like `Content-Type` and `Authorization` can use variables to switch between different authentication tokens or API keys across environments.
+</Tip>
+
+## Request body
+
+The request body can be any valid JSON value. Most commonly, it's an object:
+
+```json
+{
+  "body": {
+    "user": {
+      "name": "{{userName}}",
+      "email": "{{userEmail}}"
+    },
+    "preferences": {
+      "theme": "dark",
+      "notifications": true
+    }
+  }
+}
+```
+
+<Warning>
+The body field is only valid for POST, PUT, and PATCH requests. GET and DELETE requests typically don't include a body.
+</Warning>
+
+## Default values
+
+The `defaultValues` field provides fallback values for variables used in your request. These values have a specific priority in the resolution order:
+
+```json
+{
+  "url": "{{baseUrl}}/users/{{userId}}",
+  "defaultValues": {
+    "userId": "123"
+  }
+}
+```
+
+<Info>
+Default values have the lowest priority in variable resolution. See the [Variables](/concepts/variables) guide for the complete resolution order.
+</Info>
+
+## File organization
+
+Request files are stored in the `requests/` directory within your Mailman project:
+
+```
+your-project/
+├── config.json
+├── requests/
+│   ├── get-users.json
+│   ├── create-user.json
+│   └── auth/
+│       └── login.json
+```
+
+<Tip>
+You can organize requests into subdirectories to group related endpoints together. Mailman will recursively scan all subdirectories when listing requests.
+</Tip>
+
+## Creating request files
+
+You can create request files in two ways:
+
+<Accordion title="Using the CLI">
+  Use the `mailman new` command to interactively create a new request:
+  
+  ```bash
+  mailman new
+  ```
+  
+  The CLI will prompt you for the request name, method, URL, and other details.
+</Accordion>
+
+<Accordion title="Manually">
+  Create a `.json` file in the `requests/` directory with the required fields:
+  
+  ```bash
+  touch requests/my-request.json
+  ```
+  
+  Then edit the file with your preferred text editor.
+</Accordion>
+
+## Running requests
+
+Once you've created a request file, you can run it using:
+
+```bash
+mailman run requests/get-users.json
+```
+
+Or use the interactive selector:
+
+```bash
+mailman run
+```
+
+<Note>
+When running a request, Mailman will resolve all variables, apply environment-specific values, and execute the HTTP request. The response will be displayed in your terminal.
+</Note>

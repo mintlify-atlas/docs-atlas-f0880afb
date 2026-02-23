@@ -1,0 +1,1060 @@
+---
+title: "Troubleshooting"
+description: "Solutions to common issues, error messages, and debugging tips for Mailman CLI"
+---
+
+This guide helps you diagnose and fix common issues when using Mailman CLI. Use the sections below to find solutions to specific problems.
+
+## Quick diagnostics
+
+Before diving into specific issues, run these checks:
+
+<Steps>
+  <Step title="Verify Mailman installation">
+    ```bash
+    mailman --version
+    ```
+    
+    If this fails, reinstall:
+    ```bash
+    cd /path/to/mailman
+    yarn install
+    yarn build
+    yarn link
+    ```
+  </Step>
+
+  <Step title="Check you're in the project directory">
+    ```bash
+    ls config.json
+    ```
+    
+    If not found, navigate to your Mailman project or run `mailman init`.
+  </Step>
+
+  <Step title="Verify config.json is valid">
+    ```bash
+    cat config.json | python -m json.tool
+    ```
+    
+    Or use an online JSON validator if Python isn't available.
+  </Step>
+
+  <Step title="List available requests">
+    ```bash
+    mailman list
+    ```
+    
+    Confirms your project structure is correct.
+  </Step>
+</Steps>
+
+## Connection and network errors
+
+<AccordionGroup>
+  <Accordion title="Connection refused">
+    **Error message**: `Connection refused. Is the server running?`
+
+    **Causes**:
+    - API server is not running
+    - Wrong URL or port
+    - Wrong environment selected
+
+    **Solutions**:
+
+    1. Verify the server is running:
+       ```bash
+       curl http://localhost:3000
+       # or whatever your baseUrl is
+       ```
+
+    2. Check the URL being used:
+       ```bash
+       mailman view requests/your-request.json
+       # Verify the URL is correct
+       ```
+
+    3. Verify environment configuration:
+       ```json
+       // config.json
+       {
+         "environments": {
+           "dev": {
+             "variables": {
+               "baseUrl": "http://localhost:3000"  // Check this
+             }
+           }
+         }
+       }
+       ```
+
+    4. Try with the correct environment:
+       ```bash
+       mailman run requests/your-request.json -e dev
+       ```
+  </Accordion>
+
+  <Accordion title="ENOTFOUND or DNS errors">
+    **Error message**: `getaddrinfo ENOTFOUND api.example.com`
+
+    **Causes**:
+    - Domain doesn't exist
+    - Typo in URL
+    - DNS issues
+
+    **Solutions**:
+
+    1. Check the domain:
+       ```bash
+       nslookup api.example.com
+       # or
+       ping api.example.com
+       ```
+
+    2. Verify the URL in config.json:
+       ```bash
+       mailman view requests/your-request.json
+       # Check the resolved URL
+       ```
+
+    3. Check for typos in variable names:
+       ```json
+       // ❌ Wrong
+       "url": "{{baseUr1}}/users"  // typo: baseUr1
+       
+       // ✅ Correct
+       "url": "{{baseUrl}}/users"
+       ```
+  </Accordion>
+
+  <Accordion title="Timeout errors">
+    **Error message**: `timeout of Xms exceeded`
+
+    **Causes**:
+    - API is slow or unresponsive
+    - Network issues
+    - Large response payload
+
+    **Solutions**:
+
+    1. Try the request again (might be temporary)
+
+    2. Check if the API is working:
+       ```bash
+       curl -i https://api.example.com/endpoint
+       ```
+
+    3. Test with a simpler endpoint first
+
+    4. Verify network connectivity:
+       ```bash
+       ping api.example.com
+       ```
+  </Accordion>
+
+  <Accordion title="SSL/TLS certificate errors">
+    **Error message**: `unable to verify the first certificate` or `self signed certificate`
+
+    **Causes**:
+    - Self-signed certificates in development
+    - Expired certificates
+    - Certificate chain issues
+
+    **Solutions**:
+
+    For development only, you may need to adjust Node.js SSL settings. However, be cautious with production environments.
+
+    1. For local development, use HTTP instead of HTTPS:
+       ```json
+       {
+         "variables": {
+           "baseUrl": "http://localhost:3000"  // HTTP, not HTTPS
+         }
+       }
+       ```
+
+    2. Contact your API provider to fix certificate issues
+  </Accordion>
+</AccordionGroup>
+
+## Authentication errors
+
+<AccordionGroup>
+  <Accordion title="401 Unauthorized">
+    **Error message**: `Status: 401 Unauthorized`
+
+    **Causes**:
+    - Missing or invalid authentication token
+    - Expired token
+    - Wrong credentials
+
+    **Solutions**:
+
+    1. Verify the token is being sent:
+       ```bash
+       mailman view requests/your-request.json
+       # Check the Authorization header
+       ```
+
+    2. Check for unfilled variables:
+       ```bash
+       # If you see {{API_TOKEN}} in the output, it's not filled
+       ```
+
+    3. Verify token in .env file:
+       ```bash
+       cat .env
+       # or
+       cat .env.dev
+       ```
+
+    4. Try providing the token manually:
+       ```bash
+       mailman run requests/your-request.json -v API_TOKEN=your_actual_token
+       ```
+
+    5. Check if token has expired - get a fresh token
+
+    6. Verify the Authorization header format:
+       ```json
+       // ✅ Correct
+       "headers": {
+         "Authorization": "Bearer {{API_TOKEN}}"
+       }
+       
+       // ❌ Wrong - missing 'Bearer'
+       "headers": {
+         "Authorization": "{{API_TOKEN}}"
+       }
+       ```
+  </Accordion>
+
+  <Accordion title="403 Forbidden">
+    **Error message**: `Status: 403 Forbidden`
+
+    **Causes**:
+    - Valid credentials but insufficient permissions
+    - API key lacks required scopes
+    - IP restrictions
+    - Rate limiting
+
+    **Solutions**:
+
+    1. Verify you're using the correct credentials:
+       ```bash
+       # Check which environment is active
+       mailman run requests/your-request.json
+       # Output shows: Environment: dev
+       ```
+
+    2. Check API key permissions in your API provider's dashboard
+
+    3. Verify you're using the right endpoint:
+       ```bash
+       mailman view requests/your-request.json
+       # Confirm URL and method are correct
+       ```
+
+    4. Check rate limits - wait a moment and retry
+
+    5. Review API documentation for required scopes or permissions
+  </Accordion>
+
+  <Accordion title="API key not being replaced">
+    **Symptom**: Variables appear as `{{API_TOKEN}}` in headers
+
+    **Causes**:
+    - Variable not defined
+    - Typo in variable name
+    - Wrong .env file loaded
+
+    **Solutions**:
+
+    1. Check variable name matches exactly (case-sensitive):
+       ```json
+       // In request file
+       "Authorization": "Bearer {{API_TOKEN}}"
+       ```
+       
+       ```bash
+       # In .env file
+       API_TOKEN=your_token  # Must match exactly
+       ```
+
+    2. Verify .env file exists:
+       ```bash
+       ls -la .env*
+       ```
+
+    3. Check which .env file is being loaded:
+       ```bash
+       # Default environment uses .env
+       mailman run requests/test.json
+       
+       # Prod environment uses .env.prod
+       mailman run requests/test.json -e prod
+       ```
+
+    4. Provide the variable via command line:
+       ```bash
+       mailman run requests/test.json -v API_TOKEN=your_token
+       ```
+  </Accordion>
+</AccordionGroup>
+
+## Configuration errors
+
+<AccordionGroup>
+  <Accordion title="No config.json found">
+    **Error message**: `No config.json found. Run 'mailman init' first.`
+
+    **Causes**:
+    - Not in a Mailman project directory
+    - config.json doesn't exist
+
+    **Solutions**:
+
+    1. Navigate to your project directory:
+       ```bash
+       cd /path/to/your/mailman-project
+       ```
+
+    2. Initialize a new project:
+       ```bash
+       mailman init
+       ```
+
+    3. Verify config.json exists:
+       ```bash
+       ls config.json
+       ```
+  </Accordion>
+
+  <Accordion title="Invalid JSON in config.json">
+    **Error message**: `SyntaxError: Unexpected token...` or similar
+
+    **Causes**:
+    - Syntax error in config.json
+    - Missing comma, bracket, or quote
+
+    **Solutions**:
+
+    1. Validate JSON syntax:
+       ```bash
+       cat config.json | python -m json.tool
+       ```
+
+    2. Common JSON mistakes:
+       ```json
+       // ❌ Wrong - trailing comma
+       {
+         "environments": {
+           "dev": {},
+         }
+       }
+       
+       // ✅ Correct
+       {
+         "environments": {
+           "dev": {}
+         }
+       }
+       ```
+
+       ```json
+       // ❌ Wrong - unquoted keys
+       {
+         environments: {
+           dev: {}
+         }
+       }
+       
+       // ✅ Correct - quoted keys
+       {
+         "environments": {
+           "dev": {}
+         }
+       }
+       ```
+
+    3. Use a JSON validator or editor with JSON support
+  </Accordion>
+
+  <Accordion title="Environment not found">
+    **Symptom**: Error when using `-e` flag with environment name
+
+    **Causes**:
+    - Environment not defined in config.json
+    - Typo in environment name
+
+    **Solutions**:
+
+    1. Check available environments in config.json:
+       ```json
+       {
+         "environments": {
+           "dev": {},
+           "staging": {},
+           "prod": {}
+         }
+       }
+       ```
+
+    2. Verify environment name matches:
+       ```bash
+       # ❌ Wrong
+       mailman run requests/test.json -e production
+       
+       # ✅ Correct (matches config.json)
+       mailman run requests/test.json -e prod
+       ```
+
+    3. Use the default environment if unsure:
+       ```bash
+       mailman run requests/test.json
+       # Uses defaultEnvironment from config.json
+       ```
+  </Accordion>
+</AccordionGroup>
+
+## Request file errors
+
+<AccordionGroup>
+  <Accordion title="Request file not found">
+    **Error message**: `Request file not found: /path/to/file.json`
+
+    **Causes**:
+    - File doesn't exist
+    - Wrong path
+    - Typo in filename
+
+    **Solutions**:
+
+    1. List available requests:
+       ```bash
+       mailman list
+       ```
+
+    2. Verify file exists:
+       ```bash
+       ls requests/
+       # or
+       ls requests/your-subdirectory/
+       ```
+
+    3. Use correct path:
+       ```bash
+       # ✅ Correct
+       mailman run requests/get-users.json
+       
+       # ❌ Wrong - missing 'requests/' prefix
+       mailman run get-users.json
+       ```
+
+    4. Check for typos in filename
+  </Accordion>
+
+  <Accordion title="Invalid request file format">
+    **Error message**: `Invalid request file format: /path/to/file.json`
+
+    **Causes**:
+    - Missing required fields
+    - Invalid JSON
+    - Wrong structure
+
+    **Solutions**:
+
+    1. Verify required fields exist:
+       ```json
+       {
+         "name": "Request Name",    // Required
+         "method": "GET",           // Required
+         "url": "{{baseUrl}}/path" // Required
+       }
+       ```
+
+    2. Check JSON syntax:
+       ```bash
+       cat requests/your-request.json | python -m json.tool
+       ```
+
+    3. Compare with a working example:
+       ```json
+       {
+         "name": "Get Users",
+         "method": "GET",
+         "url": "{{baseUrl}}/users",
+         "headers": {
+           "Authorization": "Bearer {{API_TOKEN}}"
+         },
+         "body": null,
+         "cookies": false
+       }
+       ```
+
+    4. Verify HTTP method is valid:
+       ```json
+       // ✅ Valid methods
+       "method": "GET"
+       "method": "POST"
+       "method": "PUT"
+       "method": "PATCH"
+       "method": "DELETE"
+       
+       // ❌ Invalid
+       "method": "GETS"  // Typo
+       "method": "get"   // Must be uppercase
+       ```
+  </Accordion>
+
+  <Accordion title="Variables not being filled">
+    **Symptom**: Prompted to fill variables that should be defined
+
+    **Causes**:
+    - Variable not defined anywhere
+    - Typo in variable name
+    - Wrong environment
+
+    **Solutions**:
+
+    1. Check variable resolution order:
+       - Runtime `-v` flags (highest priority)
+       - `.env.<environment>` file
+       - `.env` file
+       - Request `defaultValues`
+       - Environment variables in config.json (lowest priority)
+
+    2. Define in config.json:
+       ```json
+       {
+         "environments": {
+           "dev": {
+             "variables": {
+               "baseUrl": "http://localhost:3000",
+               "userId": "123"  // Add your variable
+             }
+           }
+         }
+       }
+       ```
+
+    3. Add to .env file:
+       ```bash
+       # .env
+       userId=123
+       ```
+
+    4. Add default in request:
+       ```json
+       {
+         "defaultValues": {
+           "userId": "123"
+         }
+       }
+       ```
+
+    5. Provide at runtime:
+       ```bash
+       mailman run requests/test.json -v userId=123
+       ```
+  </Accordion>
+</AccordionGroup>
+
+## Cookie issues
+
+<AccordionGroup>
+  <Accordion title="Cookies not being included">
+    **Symptom**: No Cookie header in request despite `"cookies": true`
+
+    **Causes**:
+    - No cookie groups defined
+    - Cookie groups defined in wrong environment
+
+    **Solutions**:
+
+    1. Verify cookie groups are defined:
+       ```json
+       {
+         "environments": {
+           "dev": {
+             "variables": {...},
+             "cookies": [  // Must be here
+               {
+                 "name": "session",
+                 "cookies": {
+                   "session_id": "abc123"
+                 }
+               }
+             ]
+           }
+         }
+       }
+       ```
+
+    2. Check you're in the right environment:
+       ```bash
+       mailman view requests/test.json
+       # Shows which environment is active
+       ```
+
+    3. Verify request has cookies enabled:
+       ```json
+       {
+         "cookies": true  // Must be true
+       }
+       ```
+  </Accordion>
+
+  <Accordion title="Cookie prompt not appearing">
+    **Symptom**: Expected to choose cookie group but no prompt shows
+
+    **Causes**:
+    - Only one cookie group defined (selected automatically)
+    - Cookies not enabled in request
+
+    **Solutions**:
+
+    1. If you want a prompt, define multiple cookie groups:
+       ```json
+       {
+         "cookies": [
+           { "name": "user-1", "cookies": {...} },
+           { "name": "user-2", "cookies": {...} }
+         ]
+       }
+       ```
+
+    2. With one group, it's used automatically (this is expected behavior)
+
+    3. Verify cookies are enabled:
+       ```bash
+       cat requests/your-request.json | grep cookies
+       # Should show: "cookies": true
+       ```
+  </Accordion>
+</AccordionGroup>
+
+## Response handling
+
+<AccordionGroup>
+  <Accordion title="Empty response body">
+    **Symptom**: Response shows status 200 but no body
+
+    **Causes**:
+    - API returns empty body (204 No Content)
+    - Response is actually empty
+
+    **Solutions**:
+
+    1. Check status code:
+       ```
+       Status: 204 No Content  // Empty body is expected
+       Status: 200 OK          // Should have body
+       ```
+
+    2. Verify endpoint:
+       ```bash
+       curl -i https://api.example.com/endpoint
+       ```
+
+    3. Check response headers for content-type
+  </Accordion>
+
+  <Accordion title="Large response truncated">
+    **Symptom**: Response body seems cut off
+
+    **Causes**:
+    - Very large response
+    - Terminal output limitations
+
+    **Solutions**:
+
+    1. The full response is displayed, but your terminal might have scroll limitations
+
+    2. Redirect output to a file:
+       ```bash
+       mailman run requests/test.json > output.txt
+       ```
+
+    3. Use `less` for better viewing:
+       ```bash
+       mailman run requests/test.json | less
+       ```
+
+    4. Consider pagination if the API supports it:
+       ```bash
+       mailman run requests/get-users.json -v limit=10
+       ```
+  </Accordion>
+
+  <Accordion title="Response body not formatted">
+    **Symptom**: JSON response is all on one line
+
+    **Causes**:
+    - Mailman displays JSON pretty-printed by default
+    - Non-JSON response won't be formatted
+
+    **Solutions**:
+
+    Mailman automatically pretty-prints JSON responses. If it's not formatted:
+
+    1. Check if response is actually JSON:
+       ```
+       Response Headers:
+         content-type: text/html  // Not JSON
+       ```
+
+    2. The API might be returning an error page as HTML
+
+    3. Verify the endpoint and method are correct
+  </Accordion>
+</AccordionGroup>
+
+## Variable resolution issues
+
+<AccordionGroup>
+  <Accordion title="Wrong variable value being used">
+    **Symptom**: Variable resolves to unexpected value
+
+    **Causes**:
+    - Variable defined in multiple places
+    - Wrong environment selected
+
+    **Solutions**:
+
+    1. Understand variable priority (highest to lowest):
+       - Runtime `-v` flags
+       - `.env.<environment>`
+       - `.env`
+       - Request `defaultValues`
+       - Environment in config.json
+
+    2. Check all possible sources:
+       ```bash
+       # Check config.json
+       cat config.json
+       
+       # Check .env files
+       cat .env
+       cat .env.dev
+       
+       # Check request file
+       cat requests/your-request.json
+       ```
+
+    3. Use `-v` to force a specific value:
+       ```bash
+       mailman run requests/test.json -v variableName=correct_value
+       ```
+
+    4. Preview to see what's being used:
+       ```bash
+       mailman view requests/test.json
+       ```
+  </Accordion>
+
+  <Accordion title="Variables in nested JSON not replaced">
+    **Symptom**: Variables in request body aren't replaced
+
+    **Causes**:
+    - This is a limitation - variables only work in string values
+
+    **Example**:
+    ```json
+    {
+      "body": {
+        "name": "{{userName}}",     // ✅ Works
+        "age": {{userAge}},         // ❌ Won't work (not a string)
+        "active": {{isActive}}      // ❌ Won't work (not a string)
+      }
+    }
+    ```
+
+    **Solutions**:
+
+    1. Keep variables in string contexts:
+       ```json
+       {
+         "body": {
+           "name": "{{userName}}",
+           "age": "{{userAge}}",      // ✅ As string
+           "active": "{{isActive}}"   // ✅ As string
+         }
+       }
+       ```
+
+    2. Or use hardcoded values for non-strings:
+       ```json
+       {
+         "body": {
+           "age": 25,
+           "active": true
+         }
+       }
+       ```
+  </Accordion>
+</AccordionGroup>
+
+## Command-line issues
+
+<AccordionGroup>
+  <Accordion title="Interactive prompt stuck">
+    **Symptom**: Prompt appears but can't select anything
+
+    **Causes**:
+    - Terminal compatibility
+    - Process interruption
+
+    **Solutions**:
+
+    1. Press Ctrl+C to cancel and retry
+
+    2. Specify the file directly instead:
+       ```bash
+       # Instead of:
+       mailman run
+       
+       # Use:
+       mailman run requests/your-request.json
+       ```
+
+    3. Provide all values via flags:
+       ```bash
+       mailman run requests/test.json -e prod -v userId=123
+       ```
+  </Accordion>
+
+  <Accordion title="Command not found: mailman">
+    **Error message**: `command not found: mailman` or `mailman: command not found`
+
+    **Causes**:
+    - Mailman not installed
+    - Not linked globally
+    - PATH issue
+
+    **Solutions**:
+
+    1. Reinstall and link:
+       ```bash
+       cd /path/to/mailman/source
+       yarn install
+       yarn build
+       yarn link
+       ```
+
+    2. Verify yarn global bin is in PATH:
+       ```bash
+       yarn global bin
+       # Output: /path/to/bin
+       
+       # Add to PATH in ~/.bashrc or ~/.zshrc:
+       export PATH="$(yarn global bin):$PATH"
+       ```
+
+    3. Restart terminal after linking
+  </Accordion>
+
+  <Accordion title="Cannot read property 'X' of undefined">
+    **Error message**: Various "undefined" errors
+
+    **Causes**:
+    - Missing required configuration
+    - Malformed config or request file
+
+    **Solutions**:
+
+    1. Validate your config.json:
+       ```bash
+       cat config.json | python -m json.tool
+       ```
+
+    2. Ensure all required fields exist:
+       ```json
+       // config.json
+       {
+         "defaultEnvironment": "dev",
+         "environments": {
+           "dev": {
+             "variables": {}
+           }
+         }
+       }
+       
+       // request file
+       {
+         "name": "...",
+         "method": "...",
+         "url": "..."
+       }
+       ```
+
+    3. Recreate config if corrupted:
+       ```bash
+       mv config.json config.json.backup
+       mailman init
+       # Then merge your settings back
+       ```
+  </Accordion>
+</AccordionGroup>
+
+## Getting more help
+
+### Enable debug output
+
+While Mailman doesn't have a debug flag, you can:
+
+1. Use `mailman view` to see resolved values:
+   ```bash
+   mailman view requests/your-request.json -e prod
+   ```
+
+2. Test with curl to isolate Mailman vs API issues:
+   ```bash
+   curl -i -X GET "http://localhost:3000/users" \
+     -H "Authorization: Bearer your_token"
+   ```
+
+3. Check API logs on the server side
+
+### Compare with working example
+
+Create a minimal test case:
+
+```json
+// requests/test-simple.json
+{
+  "name": "Simple Test",
+  "method": "GET",
+  "url": "https://httpbin.org/get",
+  "headers": {}
+}
+```
+
+```bash
+mailman run requests/test-simple.json
+```
+
+If this works, the issue is with your specific configuration.
+
+### Check source code
+
+Mailman is open source. Check the source for detailed behavior:
+
+- Request execution: `/home/daytona/workspace/source/src/commands/run.ts:59`
+- Variable resolution: `/home/daytona/workspace/source/src/utils/variables.ts:39`
+- Cookie handling: `/home/daytona/workspace/source/src/utils/resolveCookieHeaders.ts:4`
+
+## Common patterns and solutions
+
+### Testing workflow
+
+```bash
+# 1. Preview the request
+mailman view requests/test.json -e staging
+
+# 2. Verify all variables are resolved
+# 3. Check headers and body
+# 4. Run the request
+mailman run requests/test.json -e staging
+```
+
+### Debugging authentication
+
+```bash
+# 1. Check what's being sent
+mailman view requests/protected.json
+
+# 2. Verify Authorization header exists and has value
+# 3. Test with a known-good token
+mailman run requests/protected.json -v API_TOKEN=known_good_token
+
+# 4. Check token hasn't expired
+# 5. Verify API endpoint permissions
+```
+
+### Debugging variables
+
+```bash
+# 1. List all .env files
+ls -la .env*
+
+# 2. Check which environment is active
+mailman view requests/test.json
+# Output shows: Environment: dev
+
+# 3. Check variable in config.json
+cat config.json | grep -A 5 '"dev"'
+
+# 4. Provide variable manually
+mailman run requests/test.json -v problematicVar=test_value
+```
+
+## Prevention tips
+
+<Tip>
+  Follow these practices to avoid common issues:
+</Tip>
+
+1. **Always preview production requests**:
+   ```bash
+   mailman view requests/delete-user.json -e prod
+   ```
+
+2. **Use .env.example for team onboarding**:
+   ```bash
+   # New team member:
+   cp .env.example .env.dev
+   # Fill in values
+   ```
+
+3. **Validate JSON before running**:
+   ```bash
+   cat requests/new-request.json | python -m json.tool
+   ```
+
+4. **Test in dev before prod**:
+   ```bash
+   mailman run requests/test.json -e dev
+   # Verify it works
+   mailman run requests/test.json -e prod
+   ```
+
+5. **Keep config.json simple**:
+   - Put secrets in .env files
+   - Use clear variable names
+   - Document your environments
+
+6. **Use version control**:
+   ```bash
+   git add config.json requests/
+   git commit -m "Add new API requests"
+   ```
+
+## Still stuck?
+
+If you're still experiencing issues:
+
+1. **Check the GitHub repository**: Look for similar issues or report a new one
+2. **Review the source code**: Mailman is open source at `~/workspace/source/`
+3. **Create a minimal reproduction**: Isolate the problem with the simplest possible example
+4. **Test with a public API**: Use `httpbin.org` to rule out API-specific issues
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Getting started" icon="rocket" href="/guides/getting-started">
+    Back to basics if you need a refresher
+  </Card>
+  
+  <Card title="Authentication" icon="key" href="/guides/authentication">
+    Deep dive into authentication methods
+  </Card>
+  
+  <Card title="Working with environments" icon="layer-group" href="/guides/working-with-environments">
+    Master environment configuration
+  </Card>
+  
+  <Card title="Managing cookies" icon="cookie" href="/guides/managing-cookies">
+    Learn about cookie groups and session auth
+  </Card>
+</CardGroup>

@@ -1,0 +1,319 @@
+---
+title: 'Request files'
+description: 'Learn about the request file format and all available fields'
+---
+
+Request files define individual HTTP requests in JSON format. They support variable interpolation, headers, request bodies, and cookies.
+
+## File location
+
+Request files should be stored in the `requests/` directory in your project root. You can organize them in subdirectories:
+
+```
+requests/
+├── users/
+│   ├── get-users.json
+│   └── create-user.json
+├── auth/
+│   ├── login.json
+│   └── refresh-token.json
+└── products/
+    └── list-products.json
+```
+
+## Structure
+
+A basic request file looks like this:
+
+```json
+{
+  "name": "Get Users",
+  "method": "GET",
+  "url": "{{baseUrl}}/users",
+  "headers": {
+    "Authorization": "Bearer {{API_KEY}}"
+  }
+}
+```
+
+## Fields
+
+<ParamField path="name" type="string" required>
+  A human-readable name for the request. This is displayed in the request list and when running the request.
+  
+  Example: `"Get Users"`, `"Create Product"`, `"Login"`
+</ParamField>
+
+<ParamField path="method" type="HttpMethod" required>
+  The HTTP method for the request. Must be one of: `"GET"`, `"POST"`, `"PUT"`, `"PATCH"`, or `"DELETE"`.
+  
+  Example: `"POST"`
+</ParamField>
+
+<ParamField path="url" type="string" required>
+  The full URL for the request. Supports variable interpolation using `{{variableName}}` syntax.
+  
+  Variables are resolved from:
+  - Config file environment variables
+  - Environment files (`.env`)
+  - Request-level `defaultValues`
+  - CLI `--var` flags
+  - Interactive prompts for unfilled variables
+  
+  Example: `"{{baseUrl}}/api/{{apiVersion}}/users"`
+</ParamField>
+
+<ParamField path="headers" type="object" default="undefined">
+  An optional object containing HTTP headers as key-value pairs. Both keys and values support variable interpolation.
+  
+  Example:
+  ```json
+  "headers": {
+    "Authorization": "Bearer {{API_KEY}}",
+    "Content-Type": "application/json",
+    "X-Request-ID": "{{requestId}}"
+  }
+  ```
+</ParamField>
+
+<ParamField path="body" type="any" default="undefined">
+  The request body. Can be any valid JSON value (object, array, string, number, boolean, or null). Strings within the body support variable interpolation.
+  
+  Example (object):
+  ```json
+  "body": {
+    "name": "John Doe",
+    "email": "john@example.com",
+    "role": "{{userRole}}"
+  }
+  ```
+  
+  Example (array):
+  ```json
+  "body": [
+    {"id": 1, "name": "Item 1"},
+    {"id": 2, "name": "Item 2"}
+  ]
+  ```
+  
+  <Note>
+    Variable interpolation works recursively through nested objects and arrays, so you can use `{{variables}}` at any depth.
+  </Note>
+</ParamField>
+
+<ParamField path="defaultValues" type="object" default="undefined">
+  An optional object containing default values for variables used in this request. These have lower priority than environment variables and CLI variables, but higher priority than prompting the user.
+  
+  Useful for request-specific defaults that may differ from your environment configuration.
+  
+  Example:
+  ```json
+  "defaultValues": {
+    "userId": "12345",
+    "pageSize": "20",
+    "sortOrder": "desc"
+  }
+  ```
+  
+  Variable resolution order (highest to lowest priority):
+  1. CLI variables (`--var key=value`)
+  2. Environment file variables (`.env` or `.env.{envName}`)
+  3. Request-level `defaultValues`
+  4. Config file environment `variables`
+  5. Interactive prompt
+</ParamField>
+
+<ParamField path="cookies" type="boolean" default="false">
+  Whether to prompt for and attach cookies from the environment configuration. When set to `true`, Mailman will:
+  
+  1. Look for cookie groups in the current environment
+  2. Prompt you to select a cookie group (if multiple exist)
+  3. Automatically format and add a `Cookie` header to the request
+  
+  Example:
+  ```json
+  "cookies": true
+  ```
+  
+  <Info>
+    Cookie groups are defined in your `config.json` file under each environment. See the [configuration file documentation](/config/config-file) for details.
+  </Info>
+</ParamField>
+
+## Variable interpolation
+
+Variables are referenced using double curly braces: `{{variableName}}`
+
+### Variable syntax
+
+The variable name must match the pattern `\w+` (alphanumeric characters and underscores).
+
+```json
+{
+  "url": "{{baseUrl}}/users/{{userId}}",
+  "headers": {
+    "Authorization": "Bearer {{API_KEY}}",
+    "X-Environment": "{{ENVIRONMENT_NAME}}"
+  },
+  "body": {
+    "name": "{{userName}}",
+    "email": "{{userEmail}}"
+  }
+}
+```
+
+### Variable resolution
+
+When you run a request, variables are resolved in this order:
+
+1. **CLI variables** - Passed with `--var key=value`
+2. **Environment file** - From `.env` or `.env.{envName}`
+3. **Request defaults** - From the `defaultValues` field
+4. **Config variables** - From the environment's `variables` in `config.json`
+5. **Interactive prompt** - You'll be asked to provide values for any remaining unfilled variables
+
+<Warning>
+  If a variable is not found in any source, Mailman will prompt you to enter its value interactively. To avoid interruptions, ensure all variables are defined in one of the sources above.
+</Warning>
+
+## Examples
+
+### GET request
+
+```json
+{
+  "name": "Get Users",
+  "method": "GET",
+  "url": "{{baseUrl}}/users",
+  "headers": {
+    "Authorization": "Bearer {{API_KEY}}"
+  }
+}
+```
+
+### POST request with JSON body
+
+```json
+{
+  "name": "Create User",
+  "method": "POST",
+  "url": "{{baseUrl}}/users",
+  "headers": {
+    "Authorization": "Bearer {{API_KEY}}",
+    "Content-Type": "application/json"
+  },
+  "body": {
+    "name": "John Doe",
+    "email": "john@example.com"
+  }
+}
+```
+
+### Request with default values
+
+```json
+{
+  "name": "Get User by ID",
+  "method": "GET",
+  "url": "{{baseUrl}}/users/{{userId}}",
+  "headers": {
+    "Authorization": "Bearer {{API_KEY}}"
+  },
+  "defaultValues": {
+    "userId": "12345"
+  }
+}
+```
+
+### Request with cookies
+
+```json
+{
+  "name": "Get Profile",
+  "method": "GET",
+  "url": "{{baseUrl}}/profile",
+  "cookies": true
+}
+```
+
+### Complex POST request
+
+```json
+{
+  "name": "Update Product",
+  "method": "PATCH",
+  "url": "{{baseUrl}}/api/{{apiVersion}}/products/{{productId}}",
+  "headers": {
+    "Authorization": "Bearer {{API_KEY}}",
+    "Content-Type": "application/json",
+    "X-Request-ID": "{{requestId}}"
+  },
+  "body": {
+    "name": "{{productName}}",
+    "price": "{{productPrice}}",
+    "categories": [
+      "{{category1}}",
+      "{{category2}}"
+    ],
+    "metadata": {
+      "updatedBy": "{{userName}}",
+      "reason": "{{updateReason}}"
+    }
+  },
+  "defaultValues": {
+    "apiVersion": "v1",
+    "updateReason": "Regular update"
+  }
+}
+```
+
+## Creating request files
+
+### Using the CLI
+
+Create a new request interactively:
+
+```bash
+mailman new
+```
+
+This will prompt you for the request details and create the file.
+
+### Using init command
+
+Generate sample request files:
+
+```bash
+mailman init
+```
+
+This creates a `requests/` directory with sample GET and POST requests.
+
+### Manually
+
+Create a new `.json` file in the `requests/` directory with the structure shown above.
+
+## Best practices
+
+<Note>
+  Organize request files in subdirectories by feature or resource (e.g., `requests/users/`, `requests/products/`). This makes it easier to find and manage requests as your project grows.
+</Note>
+
+<Warning>
+  Never hardcode sensitive values like API keys or passwords in request files. Always use variables and define the actual values in `.env` files.
+</Warning>
+
+<Info>
+  Use descriptive names for your request files and the `name` field. This makes it easier to identify requests when using `mailman list` or `mailman run`.
+</Info>
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Configuration file" icon="gear" href="/config/config-file">
+    Learn about config.json structure
+  </Card>
+  <Card title="Environment files" icon="file-lines" href="/config/environment-files">
+    Use .env files for sensitive variables
+  </Card>
+</CardGroup>

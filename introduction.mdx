@@ -1,0 +1,116 @@
+---
+title: Mailman CLI
+description: An open source CLI alternative to Postman for managing and executing HTTP requests from the terminal
+---
+
+# Mailman CLI
+
+Mailman is a powerful command-line tool that brings Postman-like functionality to your terminal. Manage and execute HTTP requests with ease, complete with variable interpolation, multiple environments, and interactive request selection.
+
+<CardGroup cols={2}>
+  <Card title="Installation" icon="download" href="/installation">
+    Get started with Mailman in minutes using npm, yarn, or from source
+  </Card>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Make your first HTTP request in under 5 minutes
+  </Card>
+  <Card title="GitHub" icon="github" href="https://github.com/yourusername/mailman">
+    View source code and contribute to the project
+  </Card>
+  <Card title="License" icon="scale-balanced" href="https://github.com/yourusername/mailman/blob/main/LICENSE">
+    Open source under MIT license
+  </Card>
+</CardGroup>
+
+## Why Mailman?
+
+Mailman is designed for developers who prefer the terminal and need a lightweight, version-controllable alternative to GUI-based API clients.
+
+### Key features
+
+<CardGroup cols={2}>
+  <Card title="Variable interpolation" icon="brackets-curly">
+    Use `{{variable}}` syntax in your requests for dynamic values
+  </Card>
+  <Card title="Multiple environments" icon="layer-group">
+    Switch between dev, staging, prod with a single flag
+  </Card>
+  <Card title="Environment files" icon="file-lines">
+    Load variables from `.env` and `.env.<environment>` files
+  </Card>
+  <Card title="Interactive mode" icon="terminal">
+    Select and create requests interactively without typing paths
+  </Card>
+  <Card title="Request preview" icon="eye">
+    View resolved requests before execution with `mailman view`
+  </Card>
+  <Card title="Runtime overrides" icon="sliders">
+    Override any variable at runtime with the `-v` flag
+  </Card>
+  <Card title="Cookie support" icon="cookie">
+    Manage cookie groups per environment for authenticated requests
+  </Card>
+  <Card title="Editor integration" icon="pen-to-square">
+    Compose request bodies in your preferred editor
+  </Card>
+</CardGroup>
+
+## How it works
+
+Mailman uses JSON files to define HTTP requests with variable placeholders. Variables are resolved from multiple sources in priority order:
+
+1. Runtime `-v` arguments
+2. `.env.<environment>` file
+3. `.env` file
+4. Request `defaultValues`
+5. Environment variables from `config.json`
+
+Unfilled variables prompt for interactive input before execution.
+
+## Example request
+
+Here's what a typical request file looks like:
+
+```json requests/get-users.json
+{
+  "name": "Get Users",
+  "method": "GET",
+  "url": "{{baseUrl}}/users",
+  "headers": {
+    "Authorization": "Bearer {{API_KEY}}"
+  }
+}
+```
+
+Run it with:
+
+```bash
+mailman run requests/get-users.json
+```
+
+Or for production:
+
+```bash
+mailman run requests/get-users.json -e prod
+```
+
+## Supported HTTP methods
+
+Mailman supports all standard HTTP methods:
+
+- `GET` - Retrieve resources
+- `POST` - Create new resources
+- `PUT` - Update entire resources
+- `PATCH` - Partially update resources
+- `DELETE` - Remove resources
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Install Mailman" icon="download" href="/installation">
+    Choose your installation method
+  </Card>
+  <Card title="Follow the quickstart" icon="rocket" href="/quickstart">
+    Make your first request in minutes
+  </Card>
+</CardGroup>

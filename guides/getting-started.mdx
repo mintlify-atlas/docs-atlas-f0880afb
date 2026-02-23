@@ -1,0 +1,404 @@
+---
+title: "Getting started"
+description: "Learn how to install Mailman, initialize your first project, and execute your first HTTP request from the terminal"
+---
+
+This guide will walk you through installing Mailman CLI, setting up your first project, and making your first API request. By the end, you'll understand the core workflow for managing HTTP requests from the command line.
+
+## What you'll learn
+
+- How to install and set up Mailman
+- Creating and organizing request files
+- Running requests with different environments
+- Using variables for flexible configurations
+
+## Installation
+
+<Steps>
+  <Step title="Clone and build Mailman">
+    First, clone the Mailman repository and build it locally:
+
+    ```bash
+    git clone https://github.com/yourusername/mailman.git
+    cd mailman
+    yarn install
+    yarn build
+    ```
+  </Step>
+
+  <Step title="Link the CLI globally">
+    Make Mailman available as a global command:
+
+    ```bash
+    yarn link
+    ```
+
+    Verify the installation:
+
+    ```bash
+    mailman --version
+    ```
+  </Step>
+</Steps>
+
+## Initialize your first project
+
+<Steps>
+  <Step title="Create a project directory">
+    Navigate to where you want to manage your API requests:
+
+    ```bash
+    mkdir my-api-project
+    cd my-api-project
+    ```
+  </Step>
+
+  <Step title="Initialize Mailman">
+    Run the init command to create the project structure:
+
+    ```bash
+    mailman init
+    ```
+
+    This creates:
+    - `config.json` - Your environment configuration
+    - `requests/` directory - Where your request files live
+    - Sample request files to get you started
+
+    <Info>
+      The init command is safe to run multiple times. It will skip existing files and only create what's missing.
+    </Info>
+  </Step>
+
+  <Step title="Explore the generated files">
+    Let's look at what was created:
+
+    ```bash
+    mailman list
+    ```
+
+    You'll see:
+    ```
+    Available requests:
+    - Get Users (requests/get-users.json)
+    - Create User (requests/create-user.json)
+    ```
+  </Step>
+</Steps>
+
+## Understanding the project structure
+
+After initialization, your project looks like this:
+
+```
+my-api-project/
+├── config.json           # Environment configuration
+├── requests/             # Request definitions
+│   ├── get-users.json
+│   └── create-user.json
+├── .env                  # Shared environment variables (optional)
+└── .env.dev              # Dev-specific variables (optional)
+```
+
+### The config.json file
+
+This file defines your environments and their variables:
+
+```json
+{
+  "defaultEnvironment": "dev",
+  "environments": {
+    "dev": {
+      "variables": {
+        "baseUrl": "http://localhost:3000",
+        "exampleVariable": "dev-example-variable"
+      }
+    },
+    "prod": {
+      "variables": {
+        "baseUrl": "https://api.example.com",
+        "exampleVariable": "prod-example-variable"
+      }
+    }
+  }
+}
+```
+
+<Note>
+  The `defaultEnvironment` is used when you don't specify the `-e` flag.
+</Note>
+
+### Request files
+
+Each request is a JSON file with this structure:
+
+```json
+{
+  "name": "Get Users",
+  "method": "GET",
+  "url": "{{baseUrl}}/users",
+  "headers": {
+    "Authorization": "Bearer {{API_KEY}}"
+  },
+  "defaultValues": {
+    "limit": "10"
+  },
+  "body": null,
+  "cookies": false
+}
+```
+
+## Making your first request
+
+<Steps>
+  <Step title="Preview a request">
+    Before executing, preview how variables will be resolved:
+
+    ```bash
+    mailman view requests/get-users.json
+    ```
+
+    Output:
+    ```
+    Request: Get Users
+    Environment: dev
+
+    Method: GET
+    URL: http://localhost:3000/users
+
+    Headers:
+      Authorization: Bearer {{API_KEY}}
+    ```
+
+    <Tip>
+      Notice that `{{baseUrl}}` was replaced with the dev environment value, but `{{API_KEY}}` remains unfilled.
+    </Tip>
+  </Step>
+
+  <Step title="Run the request">
+    Execute the request:
+
+    ```bash
+    mailman run requests/get-users.json
+    ```
+
+    If you have unfilled variables like `{{API_KEY}}`, Mailman will prompt you:
+
+    ```
+    ? Fill variable value for API_KEY: your-api-key-here
+    ```
+
+    After providing the value, the request executes:
+
+    ```
+    Running: Get Users
+    Environment: dev
+    GET http://localhost:3000/users
+
+    Status: 200 OK
+    Time: 145ms
+
+    Response Headers:
+      content-type: application/json
+      content-length: 234
+
+    Response Body:
+    [
+      {
+        "id": 1,
+        "name": "John Doe",
+        "email": "john@example.com"
+      },
+      {
+        "id": 2,
+        "name": "Jane Smith",
+        "email": "jane@example.com"
+      }
+    ]
+    ```
+  </Step>
+
+  <Step title="Try interactive mode">
+    Run without specifying a file to get an interactive menu:
+
+    ```bash
+    mailman run
+    ```
+
+    You'll see:
+    ```
+    ? Select a request to run
+    ❯ Run new request
+      Get Users (requests/get-users.json)
+      Create User (requests/create-user.json)
+    ```
+
+    Use arrow keys to select and press Enter.
+  </Step>
+</Steps>
+
+## Running requests in different environments
+
+Switch between environments using the `-e` flag:
+
+```bash
+# Use dev environment (default)
+mailman run requests/get-users.json
+
+# Use production environment
+mailman run requests/get-users.json -e prod
+
+# Preview with a specific environment
+mailman view requests/get-users.json -e prod
+```
+
+<Warning>
+  Always preview production requests before executing to avoid unintended changes.
+</Warning>
+
+## Using runtime variables
+
+Override variables without modifying files:
+
+```bash
+# Override a single variable
+mailman run requests/get-users.json -v limit=50
+
+# Override multiple variables
+mailman run requests/get-users.json -v limit=50 -v offset=10
+
+# Combine with environment selection
+mailman run requests/get-users.json -e prod -v userId=123
+```
+
+<Tip>
+  Runtime variables have the highest priority in the variable resolution order.
+</Tip>
+
+## Creating custom requests
+
+<Steps>
+  <Step title="Create a new request file">
+    Create `requests/update-user.json`:
+
+    ```json
+    {
+      "name": "Update User",
+      "method": "PUT",
+      "url": "{{baseUrl}}/users/{{userId}}",
+      "headers": {
+        "Authorization": "Bearer {{API_KEY}}",
+        "Content-Type": "application/json"
+      },
+      "body": {
+        "name": "{{userName}}",
+        "email": "{{userEmail}}"
+      }
+    }
+    ```
+  </Step>
+
+  <Step title="Test the new request">
+    ```bash
+    mailman run requests/update-user.json -v userId=123 -v userName="John Updated" -v userEmail="john.updated@example.com"
+    ```
+  </Step>
+</Steps>
+
+## Common workflows
+
+### Organize requests by feature
+
+Create subdirectories in `requests/`:
+
+```
+requests/
+├── users/
+│   ├── get-users.json
+│   ├── create-user.json
+│   └── update-user.json
+└── posts/
+    ├── get-posts.json
+    └── create-post.json
+```
+
+Mailman automatically discovers requests in subdirectories:
+
+```bash
+mailman list
+# Shows all requests from all subdirectories
+
+mailman run requests/users/get-users.json
+```
+
+### Work with POST requests
+
+Example POST request with a body:
+
+```json
+{
+  "name": "Create User",
+  "method": "POST",
+  "url": "{{baseUrl}}/users",
+  "headers": {
+    "Authorization": "Bearer {{API_KEY}}",
+    "Content-Type": "application/json"
+  },
+  "body": {
+    "name": "John Doe",
+    "email": "john@example.com",
+    "role": "admin"
+  }
+}
+```
+
+<Info>
+  Variables work in the request body too. Use `{{variableName}}` in string values.
+</Info>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Connection refused error">
+    If you see `Connection refused. Is the server running?`, check:
+    - Is your API server running?
+    - Is the `baseUrl` correct for your environment?
+    - Are you using the right environment (`-e` flag)?
+  </Accordion>
+
+  <Accordion title="Variables not resolving">
+    If variables show as `{{variableName}}` in the output:
+    - Check the variable name matches exactly (case-sensitive)
+    - Verify it's defined in `config.json` or `.env` files
+    - Try providing it with `-v variableName=value`
+  </Accordion>
+
+  <Accordion title="Request file not found">
+    If Mailman can't find your request:
+    - Ensure you're in the project directory
+    - Check the file path is correct
+    - Run `mailman list` to see available requests
+  </Accordion>
+</AccordionGroup>
+
+## Next steps
+
+Now that you understand the basics, explore more advanced features:
+
+<CardGroup cols={2}>
+  <Card title="Authentication" icon="key" href="/guides/authentication">
+    Learn how to handle Bearer tokens and API authentication
+  </Card>
+  
+  <Card title="Working with environments" icon="layer-group" href="/guides/working-with-environments">
+    Master environment management and variable resolution
+  </Card>
+  
+  <Card title="Managing cookies" icon="cookie" href="/guides/managing-cookies">
+    Use cookie groups for session-based authentication
+  </Card>
+  
+  <Card title="Troubleshooting" icon="wrench" href="/guides/troubleshooting">
+    Solutions to common issues and error messages
+  </Card>
+</CardGroup>

@@ -1,0 +1,230 @@
+---
+title: 'Configuration file'
+description: 'Learn about the config.json file structure and all available fields'
+---
+
+The `config.json` file is the central configuration file for Mailman. It defines environments with their variables and cookies that can be used across all your HTTP requests.
+
+## File location
+
+Mailman searches for `config.json` in the following order:
+
+1. Current directory and parent directories (walks up the tree)
+2. Root directory
+3. Default project path (set via `mailman set-path`)
+
+This allows you to have project-specific configurations that are automatically detected.
+
+## Structure
+
+The config file follows this structure:
+
+```json
+{
+  "defaultEnvironment": "dev",
+  "environments": {
+    "dev": {
+      "variables": {
+        "baseUrl": "http://localhost:3000",
+        "apiKey": "dev-key"
+      },
+      "cookies": [
+        {
+          "name": "session",
+          "cookies": {
+            "sessionId": "abc123",
+            "userId": "user-1"
+          }
+        }
+      ]
+    },
+    "prod": {
+      "variables": {
+        "baseUrl": "https://api.example.com",
+        "apiKey": "prod-key"
+      }
+    }
+  }
+}
+```
+
+## Fields
+
+### Root level
+
+<ParamField path="defaultEnvironment" type="string" required>
+  The name of the environment to use by default when running requests. This environment will be used unless you specify a different one with the `--env` flag.
+  
+  Example: `"dev"`, `"staging"`, `"production"`
+</ParamField>
+
+<ParamField path="environments" type="object" required>
+  An object containing all your environment configurations. Each key is the environment name, and the value is an Environment object.
+  
+  <Expandable title="Environment object">
+    <ParamField path="variables" type="object" required>
+      A key-value object where keys are variable names and values are strings. These variables can be referenced in request files using the `{{variableName}}` syntax.
+      
+      Variables are resolved in the following priority order (highest to lowest):
+      1. CLI variables passed with `--var key=value`
+      2. Environment file variables (`.env` or `.env.{envName}`)
+      3. Request-level `defaultValues`
+      4. Config file `variables`
+      
+      Example:
+      ```json
+      "variables": {
+        "baseUrl": "http://localhost:3000",
+        "apiVersion": "v1",
+        "timeout": "5000"
+      }
+      ```
+    </ParamField>
+    
+    <ParamField path="cookies" type="array" default="undefined">
+      An array of cookie groups that can be attached to requests. Useful for managing authentication sessions across multiple requests.
+      
+      <Expandable title="Cookie group object">
+        <ParamField path="name" type="string" required>
+          A descriptive name for this cookie group. If multiple cookie groups are defined, you'll be prompted to select one when running a request with `cookies: true`.
+          
+          Example: `"admin-session"`, `"user-auth"`, `"testing"`
+        </ParamField>
+        
+        <ParamField path="cookies" type="object" required>
+          A key-value object where keys are cookie names and values are cookie values. These will be formatted into a Cookie header automatically.
+          
+          Example:
+          ```json
+          "cookies": {
+            "sessionId": "abc123def456",
+            "userId": "12345",
+            "token": "bearer-token-here"
+          }
+          ```
+          
+          The above will be sent as:
+          ```
+          Cookie: sessionId=abc123def456; userId=12345; token=bearer-token-here
+          ```
+        </ParamField>
+      </Expandable>
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+## Complete example
+
+Here's a complete example showing multiple environments with variables and cookies:
+
+```json
+{
+  "defaultEnvironment": "dev",
+  "environments": {
+    "dev": {
+      "variables": {
+        "baseUrl": "http://localhost:3000",
+        "exampleVariable": "dev-example-variable"
+      },
+      "cookies": [
+        {
+          "name": "local-session",
+          "cookies": {
+            "sessionId": "local-session-123",
+            "debug": "true"
+          }
+        }
+      ]
+    },
+    "staging": {
+      "variables": {
+        "baseUrl": "https://staging-api.example.com",
+        "exampleVariable": "staging-example-variable"
+      },
+      "cookies": [
+        {
+          "name": "staging-admin",
+          "cookies": {
+            "sessionId": "staging-admin-session",
+            "role": "admin"
+          }
+        },
+        {
+          "name": "staging-user",
+          "cookies": {
+            "sessionId": "staging-user-session",
+            "role": "user"
+          }
+        }
+      ]
+    },
+    "prod": {
+      "variables": {
+        "baseUrl": "https://api.example.com",
+        "exampleVariable": "prod-example-variable"
+      }
+    }
+  }
+}
+```
+
+## Usage
+
+### Running with default environment
+
+```bash
+mailman run requests/get-users.json
+```
+
+This uses the environment specified in `defaultEnvironment`.
+
+### Running with specific environment
+
+```bash
+mailman run requests/get-users.json --env prod
+```
+
+This overrides the default and uses the `prod` environment.
+
+### Overriding variables
+
+```bash
+mailman run requests/get-users.json --env prod --var baseUrl=https://custom.api.com --var apiKey=custom-key
+```
+
+CLI variables have the highest priority and will override config file variables.
+
+## Best practices
+
+<Note>
+  Store the `config.json` file in your project root alongside the `requests/` directory. This makes it easy for Mailman to automatically detect your configuration.
+</Note>
+
+<Warning>
+  Never commit sensitive credentials directly in `config.json`. Use environment files (`.env`) for secrets and add them to `.gitignore`. Use config variables for non-sensitive values like URLs and public identifiers.
+</Warning>
+
+<Info>
+  You can have different cookie groups for different user roles or test scenarios. When a request has `cookies: true`, Mailman will prompt you to select which cookie group to use if multiple are defined.
+</Info>
+
+## Creating config file
+
+You can generate a sample `config.json` file using:
+
+```bash
+mailman init
+```
+
+This creates a config file with sample dev and prod environments.
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Request files" icon="file-code" href="/config/request-files">
+    Learn how to create HTTP request files
+  </Card>
+  <Card title="Environment files" icon="file-lines" href="/config/environment-files">
+    Use .env files for sensitive variables
+  </Card>
+</CardGroup>

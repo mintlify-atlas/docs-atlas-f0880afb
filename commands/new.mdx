@@ -1,0 +1,231 @@
+---
+title: mailman new
+description: Create a new HTTP request file interactively
+---
+
+## Syntax
+
+```bash
+mailman new
+```
+
+## Description
+
+The `mailman new` command launches an interactive wizard to create a new HTTP request file. It guides you through selecting a directory, defining the request details (method, URL, headers, body), and saving it with a custom filename.
+
+This command provides a user-friendly way to create request files without manually writing JSON.
+
+## Requirements
+
+- A valid `config.json` file must exist in your project directory
+- You must run this command from within an initialized Mailman project
+
+<Warning>
+If no `config.json` is found, the command will exit with: "No config.json found. Run 'mailman init' first."
+</Warning>
+
+## Interactive workflow
+
+When you run `mailman new`, you'll be prompted to:
+
+1. **Select a directory** - Choose where to save the request file (within `requests/` or subdirectories)
+2. **Enter request details** - Define the HTTP method, URL, headers, and body through interactive prompts
+3. **Provide a filename** - Name your request file (`.json` extension is added automatically)
+
+## Request file format
+
+The created request file follows this structure:
+
+```json
+{
+  "name": "Request Name",
+  "method": "GET|POST|PUT|PATCH|DELETE",
+  "url": "{{baseUrl}}/endpoint",
+  "headers": {
+    "Authorization": "Bearer {{API_KEY}}",
+    "Content-Type": "application/json"
+  },
+  "body": {
+    "key": "value"
+  },
+  "defaultValues": {
+    "variable": "default_value"
+  }
+}
+```
+
+<Note>
+The `headers`, `body`, and `defaultValues` fields are optional and only included if you provide values during the interactive session.
+</Note>
+
+## Usage examples
+
+<CodeGroup>
+
+```bash Create new request
+mailman new
+```
+
+```bash Interactive session example
+$ mailman new
+
+? Select directory: requests/users/
+
+Selected directory: requests/users/
+
+? Request name: Get User by ID
+? HTTP method: GET
+? URL: {{baseUrl}}/users/{{userId}}
+? Add headers? Yes
+? Header name: Authorization
+? Header value: Bearer {{API_KEY}}
+? Add another header? No
+? Add body? No
+? Add default values? Yes
+? Variable name: userId
+? Variable value: 123
+? Add another variable? No
+? Filename: get-user-by-id.json
+
+Request created at: requests/users/get-user-by-id.json
+```
+
+```bash Created file
+# requests/users/get-user-by-id.json
+{
+  "name": "Get User by ID",
+  "method": "GET",
+  "url": "{{baseUrl}}/users/{{userId}}",
+  "headers": {
+    "Authorization": "Bearer {{API_KEY}}"
+  },
+  "defaultValues": {
+    "userId": "123"
+  }
+}
+```
+
+</CodeGroup>
+
+## Common use cases
+
+### Creating a simple GET request
+
+```bash
+mailman new
+
+# Prompts:
+# Directory: requests/
+# Name: List Products
+# Method: GET
+# URL: {{baseUrl}}/products
+# Add headers? Yes
+# Authorization: Bearer {{API_KEY}}
+# Filename: list-products.json
+```
+
+### Creating a POST request with body
+
+```bash
+mailman new
+
+# Prompts:
+# Directory: requests/users/
+# Name: Create User
+# Method: POST
+# URL: {{baseUrl}}/users
+# Headers:
+#   Authorization: Bearer {{API_KEY}}
+#   Content-Type: application/json
+# Body: {"name": "{{userName}}", "email": "{{userEmail}}"}
+# Default values:
+#   userName: Test User
+#   userEmail: test@example.com
+# Filename: create-user.json
+```
+
+### Organizing requests by feature
+
+Create requests in specific subdirectories to keep your project organized:
+
+```bash
+# Create authentication requests
+mailman new
+# Select directory: requests/auth/
+# Create file: login.json
+
+mailman new
+# Select directory: requests/auth/
+# Create file: logout.json
+
+# Create user management requests
+mailman new
+# Select directory: requests/users/
+# Create file: create-user.json
+```
+
+## Variable interpolation
+
+When creating requests, you can use variable placeholders using double curly braces `{{variableName}}`. These variables will be resolved from:
+
+1. Environment variables in `config.json`
+2. Default values in the request file
+3. Environment variables from `.env` files
+4. Command-line variables passed with `--var`
+
+```json
+{
+  "name": "Update Product",
+  "method": "PUT",
+  "url": "{{baseUrl}}/products/{{productId}}",
+  "headers": {
+    "Authorization": "Bearer {{API_KEY}}"
+  },
+  "body": {
+    "name": "{{productName}}",
+    "price": "{{productPrice}}"
+  },
+  "defaultValues": {
+    "productId": "1",
+    "productName": "Sample Product",
+    "productPrice": "19.99"
+  }
+}
+```
+
+<Tip>
+Use the `defaultValues` field to provide fallback values for variables. This is especially useful for testing or when variables might not be defined in all environments.
+</Tip>
+
+## Best practices
+
+### Naming conventions
+
+- Use descriptive filenames that indicate the action: `create-user.json`, `get-order-by-id.json`
+- Keep filenames lowercase with hyphens for consistency
+- Group related requests in subdirectories
+
+### Using variables
+
+- Use `{{baseUrl}}` for the API base URL to easily switch between environments
+- Store sensitive data like API keys in environment variables, not in the request files
+- Provide sensible default values for non-sensitive variables
+
+### Request organization
+
+```
+requests/
+├── auth/
+│   ├── login.json
+│   ├── logout.json
+│   └── refresh-token.json
+├── users/
+│   ├── create-user.json
+│   ├── get-user.json
+│   ├── update-user.json
+│   └── delete-user.json
+└── products/
+    ├── list-products.json
+    ├── create-product.json
+    └── update-product.json
+```

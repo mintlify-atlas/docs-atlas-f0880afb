@@ -1,0 +1,277 @@
+---
+title: mailman view
+description: View the resolved HTTP request without executing it
+---
+
+## Syntax
+
+```bash
+mailman view <filepath> [options]
+```
+
+## Description
+
+The `mailman view` command displays the fully resolved HTTP request that would be sent when running a request file. It shows the final HTTP method, URL, headers, and body after interpolating all variables from the selected environment.
+
+This command is useful for debugging variable resolution, verifying request configuration, and previewing what will be sent before actually executing the request.
+
+## Arguments
+
+<ParamField path="filepath" type="string" required>
+  Path to the request file (relative to project root or absolute path)
+  
+  Examples:
+  - `requests/get-users.json`
+  - `requests/users/create.json`
+  - `/absolute/path/to/request.json`
+</ParamField>
+
+## Options
+
+<ParamField path="--env" type="string" default="config.defaultEnvironment">
+  Specify which environment to use for variable resolution
+  
+  Short flag: `-e`
+  
+  If not provided, uses the `defaultEnvironment` from `config.json`
+  
+  Example: `--env prod` or `-e staging`
+</ParamField>
+
+## Requirements
+
+- A valid `config.json` file must exist in your project
+- The specified request file must exist and be valid JSON
+- The request file must contain required fields: `name`, `method`, `url`
+
+<Warning>
+If the config.json is not found, the command exits with: "No config.json found. Run 'mailman init' first."
+</Warning>
+
+## Output format
+
+The command displays:
+
+1. **Request name** - The name from the request file
+2. **Environment** - Which environment is being used
+3. **Method** - HTTP method (GET, POST, PUT, PATCH, DELETE)
+4. **URL** - Fully resolved URL with variables interpolated
+5. **Headers** - All headers with resolved values (if any)
+6. **Body** - Request body formatted as JSON (if any)
+
+## Usage examples
+
+<CodeGroup>
+
+```bash View with default environment
+mailman view requests/get-users.json
+```
+
+```bash View with specific environment
+mailman view requests/get-users.json --env prod
+mailman view requests/get-users.json -e staging
+```
+
+```bash Sample output
+$ mailman view requests/create-user.json
+
+Request: Create User
+Environment: dev
+
+Method: POST
+URL: http://localhost:3000/users
+
+Headers:
+  Authorization: Bearer sk_test_abc123
+  Content-Type: application/json
+
+Body:
+{
+  "name": "John Doe",
+  "email": "john@example.com"
+}
+```
+
+```bash With production environment
+$ mailman view requests/create-user.json --env prod
+
+Request: Create User
+Environment: prod
+
+Method: POST
+URL: https://api.example.com/users
+
+Headers:
+  Authorization: Bearer sk_live_xyz789
+  Content-Type: application/json
+
+Body:
+{
+  "name": "John Doe",
+  "email": "john@example.com"
+}
+```
+
+</CodeGroup>
+
+## Variable resolution
+
+The `view` command resolves variables from multiple sources in this order:
+
+1. **Environment variables** from `config.json`
+2. **Default values** from the request file's `defaultValues` field
+3. **Environment files** (`.env`, `.env.{environment}`)
+
+### Example with variables
+
+Given this configuration:
+
+```json config.json
+{
+  "defaultEnvironment": "dev",
+  "environments": {
+    "dev": {
+      "variables": {
+        "baseUrl": "http://localhost:3000",
+        "apiKey": "dev_key_123"
+      }
+    },
+    "prod": {
+      "variables": {
+        "baseUrl": "https://api.example.com",
+        "apiKey": "prod_key_789"
+      }
+    }
+  }
+}
+```
+
+And this request file:
+
+```json requests/get-user.json
+{
+  "name": "Get User",
+  "method": "GET",
+  "url": "{{baseUrl}}/users/{{userId}}",
+  "headers": {
+    "Authorization": "Bearer {{apiKey}}"
+  },
+  "defaultValues": {
+    "userId": "123"
+  }
+}
+```
+
+Viewing in different environments:
+
+<CodeGroup>
+
+```bash Dev environment
+$ mailman view requests/get-user.json
+
+Request: Get User
+Environment: dev
+
+Method: GET
+URL: http://localhost:3000/users/123
+
+Headers:
+  Authorization: Bearer dev_key_123
+```
+
+```bash Prod environment
+$ mailman view requests/get-user.json --env prod
+
+Request: Get User
+Environment: prod
+
+Method: GET
+URL: https://api.example.com/users/123
+
+Headers:
+  Authorization: Bearer prod_key_789
+```
+
+</CodeGroup>
+
+## Common use cases
+
+### Debugging variable resolution
+
+Verify that variables are being resolved correctly before running a request:
+
+```bash
+# Check if variables are properly interpolated
+mailman view requests/complex-request.json
+
+# Compare different environments
+mailman view requests/api-call.json --env dev
+mailman view requests/api-call.json --env prod
+```
+
+### Reviewing request before execution
+
+Preview exactly what will be sent to the server:
+
+```bash
+# View the request first
+mailman view requests/create-user.json
+
+# If it looks correct, run it
+mailman run requests/create-user.json
+```
+
+### Verifying headers and authentication
+
+Confirm that authentication headers and API keys are correctly set:
+
+```bash
+# Check that API key is resolved
+mailman view requests/authenticated-request.json --env prod
+
+# Verify authorization header format
+mailman view requests/oauth-request.json
+```
+
+### Testing environment switching
+
+Ensure that your environments are properly configured:
+
+```bash
+# Test all environments
+mailman view requests/api-call.json --env dev
+mailman view requests/api-call.json --env staging  
+mailman view requests/api-call.json --env prod
+```
+
+## Error handling
+
+<CodeGroup>
+
+```bash File not found
+$ mailman view requests/nonexistent.json
+
+Request file not found: /path/to/requests/nonexistent.json
+```
+
+```bash Invalid JSON
+$ mailman view requests/invalid.json
+
+Invalid request file format: /path/to/requests/invalid.json
+```
+
+```bash Missing config
+$ mailman view requests/get-users.json
+
+No config.json found. Run 'mailman init' first.
+```
+
+</CodeGroup>
+
+<Tip>
+Use `mailman view` before `mailman run` when working with new requests or untested environments. It helps catch configuration errors without making actual HTTP requests.
+</Tip>
+
+<Note>
+The `view` command does not make any HTTP requests. It only shows what would be sent. To actually execute the request, use `mailman run`.
+</Note>

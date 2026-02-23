@@ -1,0 +1,291 @@
+---
+title: Environments
+description: Learn how to configure and use environments in Mailman for different deployment stages
+---
+
+Environments allow you to maintain different configurations for various stages of your development workflow, such as development, staging, and production. Each environment can have its own set of variables and cookie groups.
+
+## Environment configuration
+
+Environments are defined in the `config.json` file at the root of your Mailman project:
+
+```json
+{
+  "defaultEnvironment": "dev",
+  "environments": {
+    "dev": {
+      "variables": {
+        "baseUrl": "http://localhost:3000",
+        "apiKey": "dev-api-key"
+      }
+    },
+    "prod": {
+      "variables": {
+        "baseUrl": "https://api.example.com",
+        "apiKey": "prod-api-key"
+      }
+    }
+  }
+}
+```
+
+<Info>
+Based on the `Config` interface in `src/types.ts:25-28`
+</Info>
+
+## Configuration structure
+
+### Root configuration
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `defaultEnvironment` | `string` | Name of the environment to use when none is specified |
+| `environments` | `Record<string, Environment>` | Object mapping environment names to their configurations |
+
+### Environment object
+
+<Info>
+Based on the `Environment` interface in `src/types.ts:21-24`
+</Info>
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `variables` | `Record<string, string>` | Key-value pairs of variables for this environment |
+| `cookies` | `CookieGroup[]` | Optional array of cookie groups (see [Cookies](/concepts/cookies)) |
+
+## Default environment
+
+The `defaultEnvironment` field specifies which environment to use when you run a request without explicitly specifying one:
+
+```bash
+# Uses the default environment (dev)
+mailman run requests/get-users.json
+```
+
+<Tip>
+Set your most commonly used environment as the default to save time during development.
+</Tip>
+
+## Multiple environments
+
+You can define as many environments as needed for your workflow:
+
+```json
+{
+  "defaultEnvironment": "dev",
+  "environments": {
+    "dev": {
+      "variables": {
+        "baseUrl": "http://localhost:3000",
+        "dbHost": "localhost"
+      }
+    },
+    "staging": {
+      "variables": {
+        "baseUrl": "https://staging.example.com",
+        "dbHost": "staging-db.example.com"
+      }
+    },
+    "prod": {
+      "variables": {
+        "baseUrl": "https://api.example.com",
+        "dbHost": "prod-db.example.com"
+      }
+    }
+  }
+}
+```
+
+## Using environments
+
+To run a request with a specific environment, use the `--env` flag:
+
+```bash
+mailman run requests/get-users.json --env prod
+```
+
+<Warning>
+If you specify an environment that doesn't exist in your config, Mailman will throw an error: `Environment "xyz" not found in config`
+</Warning>
+
+## Environment variables
+
+Each environment contains a `variables` object that defines key-value pairs used for variable interpolation:
+
+```json
+{
+  "dev": {
+    "variables": {
+      "baseUrl": "http://localhost:3000",
+      "apiKey": "dev-key",
+      "timeout": "5000"
+    }
+  }
+}
+```
+
+These variables are available for use in your request files:
+
+```json
+{
+  "name": "Get Users",
+  "method": "GET",
+  "url": "{{baseUrl}}/users",
+  "headers": {
+    "Authorization": "Bearer {{apiKey}}"
+  }
+}
+```
+
+<Note>
+When you run this request with the `dev` environment, `{{baseUrl}}` will be replaced with `http://localhost:3000` and `{{apiKey}}` with `dev-key`.
+</Note>
+
+## Environment files (.env)
+
+In addition to variables in `config.json`, Mailman also loads variables from `.env` files:
+
+<Tabs>
+  <Tab title="Default environment">
+    For the default environment, Mailman loads from `.env`:
+    
+    ```bash
+    # .env
+    API_KEY=your-api-key-here
+    SECRET_TOKEN=your-secret-token
+    ```
+  </Tab>
+  
+  <Tab title="Other environments">
+    For other environments, Mailman loads from `.env.{environment}`:
+    
+    ```bash
+    # .env.prod
+    API_KEY=prod-api-key
+    SECRET_TOKEN=prod-secret-token
+    ```
+    
+    ```bash
+    # .env.staging
+    API_KEY=staging-api-key
+    SECRET_TOKEN=staging-secret-token
+    ```
+  </Tab>
+</Tabs>
+
+<Info>
+Environment file loading happens in `src/commands/run.ts:95-100`. The file name pattern is `.env` for default or `.env.{environmentName}` for others.
+</Info>
+
+<Tip>
+Use `.env` files for sensitive data like API keys and tokens. Add these files to your `.gitignore` to keep secrets out of version control.
+</Tip>
+
+## Environment with cookies
+
+Environments can include cookie groups for managing authentication cookies:
+
+```json
+{
+  "dev": {
+    "variables": {
+      "baseUrl": "http://localhost:3000"
+    },
+    "cookies": [
+      {
+        "name": "user-session",
+        "cookies": {
+          "sessionId": "abc123",
+          "userId": "user-456"
+        }
+      },
+      {
+        "name": "admin-session",
+        "cookies": {
+          "sessionId": "xyz789",
+          "adminId": "admin-123"
+        }
+      }
+    ]
+  }
+}
+```
+
+<Note>
+Learn more about cookie groups in the [Cookies](/concepts/cookies) guide.
+</Note>
+
+## Config file location
+
+Mailman searches for `config.json` in the following order:
+
+1. Current working directory
+2. Parent directories (traversing up to the root)
+3. Default project path (if set with `mailman set-path`)
+
+<Accordion title="How it works">
+  The search logic is implemented in `src/utils/config.ts:8-35`. Mailman walks up the directory tree from your current location, checking each directory for a `config.json` file until it finds one or reaches the filesystem root.
+</Accordion>
+
+## Initializing environments
+
+When you run `mailman init`, a sample `config.json` is created with two environments:
+
+```json
+{
+  "defaultEnvironment": "dev",
+  "environments": {
+    "dev": {
+      "variables": {
+        "baseUrl": "http://localhost:3000",
+        "exampleVariable": "dev-example-variable"
+      }
+    },
+    "prod": {
+      "variables": {
+        "baseUrl": "https://api.example.com",
+        "exampleVariable": "prod-example-variable"
+      }
+    }
+  }
+}
+```
+
+<Info>
+This sample configuration is defined in `src/commands/init.ts:6-22`
+</Info>
+
+## Best practices
+
+<Accordion title="Use meaningful environment names">
+  Choose environment names that clearly indicate their purpose:
+  - `dev`, `development`, or `local` for local development
+  - `staging`, `test`, or `qa` for testing environments
+  - `prod` or `production` for production
+</Accordion>
+
+<Accordion title="Keep sensitive data in .env files">
+  Store API keys, tokens, and other secrets in `.env` files rather than committing them to `config.json`:
+  
+  ```json
+  // config.json - safe to commit
+  {
+    "variables": {
+      "baseUrl": "https://api.example.com"
+    }
+  }
+  ```
+  
+  ```bash
+  # .env - add to .gitignore
+  API_KEY=secret-key-here
+  ```
+</Accordion>
+
+<Accordion title="Mirror your infrastructure">
+  Create environments that match your actual infrastructure setup. If you have dev, staging, and production servers, create corresponding environments in Mailman.
+</Accordion>
+
+<Accordion title="Set a sensible default">
+  Make your most frequently used environment the default to reduce typing and potential errors from forgetting to specify the environment.
+</Accordion>

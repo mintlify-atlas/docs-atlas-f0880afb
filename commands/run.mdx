@@ -1,0 +1,414 @@
+---
+title: mailman run
+description: Execute an HTTP request and display the response
+---
+
+## Syntax
+
+```bash
+mailman run [filepath] [options]
+```
+
+## Description
+
+The `mailman run` command executes an HTTP request and displays the response. If no filepath is provided, it presents an interactive menu to select from available requests or create a new one on the fly.
+
+This is the primary command for making HTTP requests using Mailman. It handles variable resolution, authentication, cookie management, and displays comprehensive response information including status, headers, and body.
+
+## Arguments
+
+<ParamField path="filepath" type="string" optional>
+  Path to the request file (relative to project root or absolute path)
+  
+  If omitted, an interactive menu will prompt you to:
+  - Select from existing requests
+  - Run a new request without saving
+  
+  Examples:
+  - `requests/get-users.json`
+  - `requests/users/create.json`
+  - `/absolute/path/to/request.json`
+</ParamField>
+
+## Options
+
+<ParamField path="--env" type="string" default="config.defaultEnvironment">
+  Specify which environment to use for variable resolution
+  
+  Short flag: `-e`
+  
+  If not provided, uses the `defaultEnvironment` from `config.json`
+  
+  The command will look for environment-specific `.env` files:
+  - Default environment: `.env`
+  - Custom environment: `.env.{environment}`
+  
+  Example: `--env prod` or `-e staging`
+</ParamField>
+
+<ParamField path="--var" type="string[]" repeatable>
+  Set variables at runtime using key=value pairs
+  
+  Short flag: `-v`
+  
+  Can be used multiple times to set multiple variables
+  
+  These variables override environment variables and default values
+  
+  Examples:
+  - `--var userId=123`
+  - `-v apiKey=abc123 -v userId=456`
+  - `--var baseUrl=http://localhost:8000`
+</ParamField>
+
+## Requirements
+
+- A valid `config.json` file must exist in your project
+- The specified request file must exist and be valid JSON (if filepath provided)
+- The request file must contain required fields: `name`, `method`, `url`
+
+<Warning>
+If the config.json is not found, the command exits with: "No config.json found. Run 'mailman init' first."
+</Warning>
+
+## Output format
+
+The command displays:
+
+1. **Request info** - Name, environment, method, and URL
+2. **Status** - HTTP status code and text (color-coded: green for 2xx, yellow for 3xx, red for 4xx/5xx)
+3. **Time** - Request duration in milliseconds
+4. **Response headers** - All headers returned by the server
+5. **Response body** - Formatted response body (JSON is pretty-printed)
+
+## Usage examples
+
+<CodeGroup>
+
+```bash Interactive selection
+# Prompts you to select a request
+mailman run
+```
+
+```bash Run specific request
+mailman run requests/get-users.json
+```
+
+```bash Run with environment
+mailman run requests/get-users.json --env prod
+mailman run requests/get-users.json -e staging
+```
+
+```bash Run with variables
+mailman run requests/get-user.json --var userId=123
+mailman run requests/update-user.json -v userId=123 -v userName="John Doe"
+```
+
+```bash Combine environment and variables
+mailman run requests/api-call.json --env prod --var apiKey=custom_key
+```
+
+</CodeGroup>
+
+### Interactive menu
+
+When no filepath is provided:
+
+```bash
+$ mailman run
+
+? Select a request to run:
+  > Run new request
+    Get Users (requests/get-users.json)
+    Create User (requests/create-user.json)
+    Update User (requests/users/update-user.json)
+    Delete User (requests/users/delete-user.json)
+```
+
+### Sample output
+
+<CodeGroup>
+
+```bash Successful request
+$ mailman run requests/get-users.json
+
+Running: Get Users
+Environment: dev
+GET http://localhost:3000/users
+
+Status: 200 OK
+Time: 245ms
+
+Response Headers:
+  content-type: application/json
+  content-length: 1234
+  date: Mon, 23 Feb 2026 10:30:00 GMT
+
+Response Body:
+[
+  {
+    "id": 1,
+    "name": "John Doe",
+    "email": "john@example.com"
+  },
+  {
+    "id": 2,
+    "name": "Jane Smith",
+    "email": "jane@example.com"
+  }
+]
+```
+
+```bash Error response
+$ mailman run requests/get-user.json --var userId=999
+
+Running: Get User
+Environment: dev
+GET http://localhost:3000/users/999
+
+Status: 404 Not Found
+Time: 89ms
+
+Response Headers:
+  content-type: application/json
+  content-length: 45
+
+Response Body:
+{
+  "error": "User not found"
+}
+```
+
+```bash Connection error
+$ mailman run requests/api-call.json
+
+Running: API Call
+Environment: dev
+GET http://localhost:3000/api/data
+
+Connection refused. Is the server running?
+```
+
+</CodeGroup>
+
+## Variable resolution priority
+
+Variables are resolved in this order (later sources override earlier ones):
+
+1. **Environment variables** from `config.json`
+2. **Default values** from request file's `defaultValues` field
+3. **Environment files** (`.env` or `.env.{environment}`)
+4. **Command-line variables** passed via `--var` flag
+5. **Interactive prompts** for any remaining unfilled variables
+
+### Example
+
+Given this setup:
+
+```json config.json
+{
+  "environments": {
+    "dev": {
+      "variables": {
+        "baseUrl": "http://localhost:3000",
+        "apiKey": "dev_key"
+      }
+    }
+  }
+}
+```
+
+```json requests/get-user.json
+{
+  "name": "Get User",
+  "method": "GET",
+  "url": "{{baseUrl}}/users/{{userId}}",
+  "headers": {
+    "Authorization": "Bearer {{apiKey}}"
+  },
+  "defaultValues": {
+    "userId": "1"
+  }
+}
+```
+
+```env .env
+API_SECRET=secret_from_env_file
+```
+
+Running with variables:
+
+```bash
+# Uses: baseUrl from config, userId from default values, apiKey from config
+mailman run requests/get-user.json
+
+# Override userId
+mailman run requests/get-user.json --var userId=123
+
+# Override multiple values
+mailman run requests/get-user.json --var userId=123 --var apiKey=custom_key
+```
+
+## Cookie management
+
+If your request file includes `"cookies": true` and your environment defines cookie groups in `config.json`, cookies will be automatically resolved and added to request headers.
+
+```json config.json
+{
+  "environments": {
+    "dev": {
+      "variables": {...},
+      "cookies": [
+        {
+          "name": "auth_cookies",
+          "cookies": {
+            "session_id": "abc123",
+            "user_token": "xyz789"
+          }
+        }
+      ]
+    }
+  }
+}
+```
+
+```json request.json
+{
+  "name": "Authenticated Request",
+  "method": "GET",
+  "url": "{{baseUrl}}/protected",
+  "cookies": true
+}
+```
+
+<Note>
+Cookies are automatically formatted as a proper Cookie header when the request is executed.
+</Note>
+
+## Interactive variable prompts
+
+If a request contains variables that aren't defined in any configuration source, Mailman will prompt you to enter values interactively:
+
+```bash
+$ mailman run requests/search.json
+
+? Enter value for 'searchQuery': laptop
+? Enter value for 'maxResults': 10
+
+Running: Search Products
+Environment: dev
+GET http://localhost:3000/search?q=laptop&limit=10
+...
+```
+
+## Common use cases
+
+### Quick API testing
+
+```bash
+# Run without specifying a file for interactive selection
+mailman run
+
+# Or directly run a specific request
+mailman run requests/health-check.json
+```
+
+### Testing different environments
+
+```bash
+# Test in development
+mailman run requests/get-data.json --env dev
+
+# Verify in staging
+mailman run requests/get-data.json --env staging
+
+# Run in production
+mailman run requests/get-data.json --env prod
+```
+
+### Dynamic parameter testing
+
+```bash
+# Test different user IDs
+mailman run requests/get-user.json --var userId=1
+mailman run requests/get-user.json --var userId=2
+mailman run requests/get-user.json --var userId=3
+
+# Test with different filters
+mailman run requests/search.json --var query=laptop --var limit=10
+mailman run requests/search.json --var query=phone --var limit=20
+```
+
+### Debugging requests
+
+```bash
+# View first to check the request
+mailman view requests/api-call.json --env prod
+
+# Then run if it looks correct
+mailman run requests/api-call.json --env prod
+```
+
+### Running one-off requests
+
+```bash
+# Start interactive mode without a file
+mailman run
+
+# Select "Run new request"
+# Define request on the fly without saving
+```
+
+## Error handling
+
+<CodeGroup>
+
+```bash File not found
+$ mailman run requests/nonexistent.json
+
+Request file not found: /path/to/requests/nonexistent.json
+```
+
+```bash Connection refused
+$ mailman run requests/api-call.json
+
+Running: API Call
+Environment: dev
+GET http://localhost:3000/api
+
+Connection refused. Is the server running?
+```
+
+```bash Request failed
+$ mailman run requests/invalid-request.json
+
+Running: Invalid Request
+Environment: dev
+GET http://invalid-url
+
+Request failed: getaddrinfo ENOTFOUND invalid-url
+```
+
+```bash No config
+$ mailman run requests/get-users.json
+
+No config.json found. Run 'mailman init' first.
+```
+
+</CodeGroup>
+
+## Status code colors
+
+Response status codes are color-coded for quick identification:
+
+- **Green**: 2xx (Success)
+- **Yellow**: 3xx (Redirection)
+- **Red**: 4xx and 5xx (Client and Server Errors)
+
+<Tip>
+Use `mailman view` before `mailman run` when testing new requests to verify variable resolution without making actual HTTP calls.
+</Tip>
+
+<Warning>
+Command-line variables passed with `--var` override all other variable sources. Use this carefully in production environments.
+</Warning>

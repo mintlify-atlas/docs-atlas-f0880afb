@@ -1,0 +1,308 @@
+---
+title: mailman set-path and show-path
+description: Manage the default project path for Mailman commands
+---
+
+## Overview
+
+Mailman provides two commands for managing a global default project path:
+
+- `mailman set-path` - Set or clear the default project directory
+- `mailman show-path` - Display the current default project path
+
+These commands allow you to run Mailman commands from any directory without specifying the project path each time.
+
+---
+
+## mailman set-path
+
+### Syntax
+
+```bash
+mailman set-path [path] [options]
+```
+
+### Description
+
+The `set-path` command sets a default project directory for Mailman. Once set, you can run Mailman commands from any location on your system, and they will operate on the configured project.
+
+This is useful when:
+- You frequently switch between directories
+- You want to run Mailman commands from anywhere
+- You're working with a single main API project
+
+### Arguments
+
+<ParamField path="path" type="string" optional>
+  Path to the Mailman project directory
+  
+  - Can be relative or absolute
+  - If omitted, uses the current working directory
+  - Must contain a valid `config.json` file
+  
+  Examples:
+  - `./my-api-project`
+  - `/home/user/projects/api`
+  - `../another-project`
+</ParamField>
+
+### Options
+
+<ParamField path="--clear" type="boolean">
+  Clear the default project path
+  
+  Short flag: `-c`
+  
+  Removes the stored default path, returning to normal behavior where Mailman operates on the current directory
+  
+  Example: `--clear` or `-c`
+</ParamField>
+
+### Usage examples
+
+<CodeGroup>
+
+```bash Set to current directory
+mailman set-path
+# Uses current directory
+```
+
+```bash Set to specific path
+mailman set-path /home/user/my-api-project
+mailman set-path ./projects/api
+mailman set-path ~/work/backend-api
+```
+
+```bash Clear default path
+mailman set-path --clear
+mailman set-path -c
+```
+
+```bash Sample output - success
+$ mailman set-path ~/projects/my-api
+
+Default project path set to: /home/user/projects/my-api
+```
+
+```bash Sample output - no config found
+$ mailman set-path ~/projects/invalid
+
+No config.json found at /home/user/projects/invalid
+Run 'mailman init' in that directory first.
+```
+
+```bash Sample output - cleared
+$ mailman set-path --clear
+
+Default project path cleared.
+```
+
+</CodeGroup>
+
+### How it works
+
+1. The command resolves the provided path to an absolute path
+2. Validates that a `config.json` exists in that directory
+3. Stores the path in a global configuration file
+4. All subsequent Mailman commands use this path unless overridden
+
+<Note>
+The default path is stored globally on your system, so it persists across terminal sessions and directory changes.
+</Note>
+
+---
+
+## mailman show-path
+
+### Syntax
+
+```bash
+mailman show-path
+```
+
+### Description
+
+The `show-path` command displays the currently configured default project path. Use this to verify which project Mailman will operate on when running commands from different directories.
+
+### Usage examples
+
+<CodeGroup>
+
+```bash Check default path
+mailman show-path
+```
+
+```bash Sample output - path is set
+$ mailman show-path
+
+Default project path: /home/user/projects/my-api
+```
+
+```bash Sample output - no path set
+$ mailman show-path
+
+No default project path set.
+```
+
+</CodeGroup>
+
+---
+
+## Common use cases
+
+### Single project workflow
+
+Set a default path for your main API project:
+
+```bash
+# Navigate to your project
+cd ~/projects/my-api
+
+# Initialize if needed
+mailman init
+
+# Set as default
+mailman set-path
+
+# Now you can run commands from anywhere
+cd ~/Documents
+mailman list
+mailman run requests/get-users.json
+
+# Still works
+cd /tmp
+mailman view requests/create-user.json
+```
+
+### Switching between projects
+
+```bash
+# Set default to project A
+mailman set-path ~/projects/api-a
+mailman show-path
+# Default project path: /home/user/projects/api-a
+
+# Work with project A
+mailman list
+mailman run requests/test.json
+
+# Switch to project B
+mailman set-path ~/projects/api-b
+mailman show-path
+# Default project path: /home/user/projects/api-b
+
+# Now working with project B
+mailman list
+mailman run requests/test.json
+```
+
+### Team collaboration
+
+Set up a shared project path for team members:
+
+```bash
+# Each team member sets their local path
+mailman set-path ~/shared/team-api
+
+# Everyone can now run commands from anywhere
+mailman list
+mailman run requests/smoke-tests.json
+```
+
+### CI/CD integration
+
+```bash
+#!/bin/bash
+# In your CI/CD pipeline
+
+# Set the project path
+mailman set-path /workspace/api-tests
+
+# Run tests from any directory
+mailman run requests/health-check.json
+mailman run requests/integration-test.json
+
+# Clear when done
+mailman set-path --clear
+```
+
+### Temporary override
+
+Even with a default path set, you can work on a different project by running commands from within that project's directory:
+
+```bash
+# Default is set to project A
+mailman set-path ~/projects/api-a
+
+# But you can still work on project B by being in its directory
+cd ~/projects/api-b
+mailman list  # Lists requests from api-b, not api-a
+mailman run requests/test.json  # Runs from api-b
+```
+
+<Warning>
+This behavior depends on implementation. Check your version's behavior to confirm.
+</Warning>
+
+### Multiple environments workflow
+
+```bash
+# Development project
+mailman set-path ~/dev/api
+mailman run requests/test.json --env dev
+
+# Switch to staging project (separate config)
+mailman set-path ~/staging/api  
+mailman run requests/test.json --env staging
+
+# Clear and work locally
+mailman set-path --clear
+cd ~/current-project
+mailman run requests/test.json
+```
+
+## Verification workflow
+
+Before running important commands, verify your current default path:
+
+```bash
+# Check which project is active
+mailman show-path
+
+# If it's wrong, set the correct one
+mailman set-path ~/correct/project
+
+# Verify again
+mailman show-path
+
+# Now safe to run commands
+mailman run requests/important-request.json --env prod
+```
+
+## Best practices
+
+### For individual developers
+
+- Set a default path if you primarily work on one API project
+- Use `show-path` regularly to confirm which project is active
+- Clear the default path when switching to project-specific work
+
+### For teams
+
+- Document the expected project structure in your team's README
+- Include `mailman set-path` instructions in onboarding docs
+- Use relative paths in documentation (e.g., `requests/test.json` instead of absolute paths)
+
+### For automation
+
+- Always set the path explicitly in scripts
+- Clear the path at the end of scripts to avoid side effects
+- Use absolute paths in CI/CD to avoid ambiguity
+
+<Tip>
+Use `mailman show-path` before running critical production commands to ensure you're operating on the correct project.
+</Tip>
+
+<Note>
+The default project path is stored in a global configuration file on your system, separate from any project-specific `config.json` files.
+</Note>
