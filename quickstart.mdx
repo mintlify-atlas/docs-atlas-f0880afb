@@ -232,7 +232,7 @@ mailman run
 
 You'll see an interactive menu:
 
-```
+```text
 ? Select a request to run
   Run new request
 ❯ Get Users - requests/get-users.json
@@ -283,10 +283,13 @@ mailman run requests/update-user.json -v userId=123
 When the same variable is defined in multiple places, Mailman uses this priority order (highest first):
 
 1. **Runtime `-v` arguments** - Highest priority
-2. **`.env.<environment>` file** - Environment-specific variables
-3. **`.env` file** - Shared variables
-4. **Request `defaultValues`** - Per-request defaults
-5. **Environment variables from `config.json`** - Lowest priority
+2. **`.env` file** - Either `.env` (default environment) or `.env.<environment>` (custom environment)
+3. **Request `defaultValues`** - Per-request defaults
+4. **Environment variables from `config.json`** - Lowest priority
+
+<Note>
+Mailman loads either `.env` (when using the default environment) or `.env.<environment>` (when using a custom environment with `-e`), but not both at the same time.
+</Note>
 
 Example with `defaultValues` in a request:
 

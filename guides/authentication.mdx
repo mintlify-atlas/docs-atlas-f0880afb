@@ -161,19 +161,20 @@ Variables are resolved in this order (highest priority first):
    mailman run requests/get-data.json -v API_TOKEN=override_token
    ```
 
-2. **Environment-specific `.env` file** - `.env.dev`, `.env.prod`, etc.
+2. **Environment file** - Either `.env` (default) or `.env.<environment>` (custom)
    ```bash
-   # In .env.prod
+   # .env (for default environment)
+   API_TOKEN=dev_token
+   
+   # .env.prod (when using -e prod)
    API_TOKEN=prod_token
    ```
+   
+   <Note>
+   Only ONE .env file is loaded based on the selected environment. Use `.env` for the default environment, or `.env.<name>` for custom environments with `-e <name>`.
+   </Note>
 
-3. **Shared `.env` file** - Fallback for shared credentials
-   ```bash
-   # In .env
-   API_TOKEN=shared_token
-   ```
-
-4. **Request defaultValues** - Request-level defaults
+3. **Request defaultValues** - Request-level defaults
    ```json
    {
      "defaultValues": {
@@ -182,7 +183,7 @@ Variables are resolved in this order (highest priority first):
    }
    ```
 
-5. **Environment variables in config.json** - Lowest priority
+4. **Environment variables in config.json** - Lowest priority
    ```json
    {
      "environments": {
@@ -468,7 +469,7 @@ Instead, share instructions:
        # Loads .env.prod
        ```
 
-    2. Verify variable resolution priority (runtime > .env.{`<env>`} > .env > defaultValues > config.json)
+    2. Verify variable resolution priority (runtime > .env > defaultValues > config.json)
 
     3. Use `-v` to force a specific value for testing
   </Accordion>

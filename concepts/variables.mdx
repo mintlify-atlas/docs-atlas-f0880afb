@@ -82,23 +82,8 @@ Variable interpolation recursively processes all string values in the request ob
 When you run a request, Mailman resolves variables in a specific order. Values from higher-priority sources override those from lower-priority sources:
 
 <Steps>
-  <Step title="Request default values (lowest priority)">
-    Variables defined in the `defaultValues` field of the request file:
-    
-    ```json
-    {
-      "url": "{{baseUrl}}/users/{{userId}}",
-      "defaultValues": {
-        "userId": "123"
-      }
-    }
-    ```
-    
-    Applied in `src/commands/run.ts:105-109`
-  </Step>
-  
-  <Step title="Environment variables from config.json">
-    Variables defined in the environment configuration:
+  <Step title="Environment variables from config.json (lowest priority)">
+    Variables defined in the environment configuration are loaded first:
     
     ```json
     {
@@ -115,20 +100,39 @@ When you run a request, Mailman resolves variables in a specific order. Values f
     Applied in `src/commands/run.ts:94`
   </Step>
   
+  <Step title="Request default values">
+    Variables defined in the `defaultValues` field of the request file override config.json:
+    
+    ```json
+    {
+      "url": "{{baseUrl}}/users/{{userId}}",
+      "defaultValues": {
+        "userId": "123"
+      }
+    }
+    ```
+    
+    Applied in `src/commands/run.ts:105-109`
+  </Step>
+  
   <Step title="Environment file variables (.env)">
-    Variables loaded from `.env` or `.env.{environment}` files:
+    Variables loaded from `.env` (default environment) or `.env.<environment>` (custom environment) override defaultValues:
     
     ```bash
-    # .env
+    # .env or .env.prod
     API_KEY=your-api-key-here
     baseUrl=http://localhost:8080
     ```
     
-    Applied in `src/commands/run.ts:110-114`
+    <Note>
+    Only ONE .env file is loaded: `.env` for the default environment, or `.env.<environment>` for custom environments specified with `-e`.
+    </Note>
+    
+    Applied in `src/commands/run.ts:95-100, 110-114`
   </Step>
   
   <Step title="Command-line variables (highest priority)">
-    Variables passed via the `--var` flag:
+    Variables passed via the `--var` flag have the highest priority and override all other sources:
     
     ```bash
     mailman run --var userId=456 --var baseUrl=http://custom.com

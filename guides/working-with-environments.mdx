@@ -162,10 +162,13 @@ Understanding how Mailman resolves variables is crucial for effective environmen
 Variables are resolved in this order (highest to lowest priority):
 
 1. **Runtime `-v` arguments**
-2. **Environment-specific `.env` file** (`.env.<environment>`)
-3. **Shared `.env` file**
-4. **Request `defaultValues`**
-5. **Environment variables in `config.json`**
+2. **Environment file** - Either `.env` (default environment) or `.env.<environment>` (custom environment)
+3. **Request `defaultValues`**
+4. **Environment variables in `config.json`**
+
+<Note>
+Mailman loads only ONE .env file at a time based on the selected environment. It does not merge multiple .env files.
+</Note>
 
 ### How it works
 
@@ -202,17 +205,12 @@ With these configurations:
 ```
 
 ```bash
-# .env
-API_TOKEN=shared_token
+# .env (used for default environment)
+API_TOKEN=dev_token
 limit=20
 ```
 
-```bash
-# .env.dev
-API_TOKEN=dev_token
-```
-
-When you run:
+When you run with the default environment:
 
 ```bash
 mailman run requests/get-users.json -v limit=50
@@ -220,8 +218,8 @@ mailman run requests/get-users.json -v limit=50
 
 Variables resolve as:
 - `baseUrl` = `http://localhost:3000` (from config.json)
-- `API_TOKEN` = `dev_token` (from .env.dev, overrides .env)
-- `limit` = `50` (from -v flag, highest priority)
+- `API_TOKEN` = `dev_token` (from .env)
+- `limit` = `50` (from -v flag, overrides .env which overrides defaultValues which overrides config.json)
 
 <Info>
   This priority system gives you maximum flexibility: config for defaults, .env for secrets, and -v for quick overrides.
